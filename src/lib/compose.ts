@@ -41,45 +41,59 @@ export function buildRunnerStateDir(pool: PoolConfig, index: number): string {
 
 function renderService(pool: PoolConfig, index: number): Record<string, unknown> {
   const runnerStateDir = buildRunnerStateDir(pool, index);
+  const environment: Record<string, string> = {
+    GITHUB_PAT: "${GITHUB_PAT}",
+    GITHUB_API_URL: "${GITHUB_API_URL:-https://api.github.com}",
+    GITHUB_ORG: pool.organization,
+    RUNNER_SCOPE: "organization",
+    RUNNER_NAME: buildRunnerName(pool, index),
+    RUNNER_GROUP: pool.runnerGroup,
+    RUNNER_LABELS: pool.labels.join(","),
+    RUNNER_VISIBILITY: pool.visibility,
+    RUNNER_REPOSITORY_ACCESS: pool.repositoryAccess,
+    RUNNER_STATE_DIR: runnerStateDir,
+    RUNNER_LOG_DIR: `${runnerStateDir}/logs`,
+    RUNNER_WORK_DIR: `${runnerStateDir}/_work`,
+    RUNNER_EPHEMERAL: "true",
+    RUNNER_DISABLE_UPDATE: "true"
+  };
+
+  if (pool.repositoryAccess === "selected") {
+    environment.RUNNER_ALLOWED_REPOSITORIES = pool.allowedRepositories.join(",");
+  }
+
   const service: Record<string, unknown> = {
     image: pool.imageRef,
-    platform: `linux/${pool.architecture}`,
     container_name: buildServiceName(pool, index),
     hostname: buildRunnerName(pool, index),
     restart: "unless-stopped",
-    init: true,
     stop_grace_period: "2m",
-    environment: {
-      GITHUB_PAT: "${GITHUB_PAT}",
-      GITHUB_API_URL: "${GITHUB_API_URL:-https://api.github.com}",
-      GITHUB_ORG: pool.organization,
-      RUNNER_SCOPE: "organization",
-      RUNNER_NAME: buildRunnerName(pool, index),
-      RUNNER_GROUP: pool.runnerGroup,
-      RUNNER_LABELS: pool.labels.join(","),
-      RUNNER_VISIBILITY: pool.visibility,
-      RUNNER_ALLOWED_REPOSITORIES: pool.allowedRepositories.join(","),
-      RUNNER_STATE_DIR: runnerStateDir,
-      RUNNER_LOG_DIR: `${runnerStateDir}/logs`,
-      RUNNER_WORK_DIR: `${runnerStateDir}/_work`,
-      RUNNER_EPHEMERAL: "true",
-      RUNNER_DISABLE_UPDATE: "true"
-    },
+    environment,
     volumes: [`${runnerStateDir}:${runnerStateDir}`],
     security_opt: ["no-new-privileges:true"],
     cap_drop: ["ALL"],
     labels: {
       "com.synology-gh-runner.pool": pool.key,
       "com.synology-gh-runner.visibility": pool.visibility,
+      "com.synology-gh-runner.repository-access": pool.repositoryAccess,
       "com.synology-gh-runner.allowed-repositories":
-        pool.allowedRepositories.join(","),
+        pool.repositoryAccess === "all"
+          ? "all"
+          : pool.allowedRepositories.join(","),
       "com.synology-gh-runner.shell-only": "true"
-    },
-    pids_limit: pool.resources.pidsLimit
+    }
   };
+
+  if (pool.architecture !== "auto") {
+    service.platform = `linux/${pool.architecture}`;
+  }
 
   if (pool.resources.cpus) {
     service.cpus = pool.resources.cpus;
+  }
+
+  if (pool.resources.pidsLimit !== undefined) {
+    service.pids_limit = pool.resources.pidsLimit;
   }
 
   if (pool.resources.memory) {

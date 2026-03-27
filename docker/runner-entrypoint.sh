@@ -4,9 +4,22 @@ set -Eeuo pipefail
 RUNNER_HOME="${RUNNER_HOME:-/actions-runner}"
 runner_configured="false"
 runner_exit_code=0
+runner_exec_mode="runner"
 
 log() {
   printf '[%s] %s\n' "$(date -Iseconds)" "$*"
+}
+
+run_runner_bash() {
+  local command="$1"
+  shift || true
+
+  if [[ "${runner_exec_mode}" == "root" ]]; then
+    env RUNNER_ALLOW_RUNASROOT=1 "$@" bash -lc "${command}"
+    return
+  fi
+
+  env "$@" gosu runner bash -lc "${command}"
 }
 
 require_env() {
@@ -90,7 +103,9 @@ cleanup_runner() {
     return 0
   fi
 
-  if ! RUNNER_TOKEN="${remove_token}" gosu runner bash -lc 'cd "${RUNNER_HOME}" && ./config.sh remove --token "${RUNNER_TOKEN}"'; then
+  if ! run_runner_bash \
+    'cd "${RUNNER_HOME}" && ./config.sh remove --token "${RUNNER_TOKEN}"' \
+    "RUNNER_TOKEN=${remove_token}"; then
     log "runner removal command failed; check GitHub runner inventory for stale registrations"
     return 0
   fi
@@ -120,14 +135,32 @@ require_env RUNNER_WORK_DIR
 : "${RUNNER_SCOPE:=organization}"
 : "${RUNNER_EPHEMERAL:=true}"
 : "${RUNNER_DISABLE_UPDATE:=true}"
+: "${RUNNER_REPOSITORY_ACCESS:=selected}"
 
 if [[ "${RUNNER_SCOPE}" != "organization" ]]; then
   log "RUNNER_SCOPE=${RUNNER_SCOPE} is unsupported in v1; only organization runners are implemented"
   exit 1
 fi
 
-mkdir -p "${RUNNER_STATE_DIR}" "${RUNNER_LOG_DIR}" "${RUNNER_WORK_DIR}"
-chown -R runner:runner "${RUNNER_STATE_DIR}"
+prepare_state_dir() {
+  local probe_file
+
+  mkdir -p "${RUNNER_STATE_DIR}" "${RUNNER_LOG_DIR}" "${RUNNER_WORK_DIR}"
+
+  if ! chown -R runner:runner "${RUNNER_STATE_DIR}" 2>/dev/null; then
+    log "state directory ownership update failed for ${RUNNER_STATE_DIR}; falling back to root runner execution for Synology-compatible bind mounts"
+    runner_exec_mode="root"
+    return
+  fi
+
+  probe_file="${RUNNER_LOG_DIR}/.runner-write-test"
+  if ! gosu runner bash -lc "touch '${probe_file}' && rm -f '${probe_file}'"; then
+    log "runner user cannot write to ${RUNNER_STATE_DIR}; falling back to root runner execution"
+    runner_exec_mode="root"
+  fi
+}
+
+prepare_state_dir
 
 registration_token="$(request_runner_token registration)"
 if [[ -z "${registration_token}" ]]; then
@@ -160,10 +193,20 @@ fi
 cleanup_local_state
 
 log "configuring runner ${RUNNER_NAME} in group ${RUNNER_GROUP:-default}"
-log "allowed repositories: ${RUNNER_ALLOWED_REPOSITORIES:-unset}"
-gosu runner bash -lc "cd '${RUNNER_HOME}' && ./config.sh ${config_args[*]@Q}"
+log "repository access: ${RUNNER_REPOSITORY_ACCESS}"
+if [[ "${RUNNER_REPOSITORY_ACCESS}" == "all" ]]; then
+  log "allowed repositories: all repositories in ${GITHUB_ORG}"
+else
+  log "allowed repositories: ${RUNNER_ALLOWED_REPOSITORIES:-unset}"
+fi
+if [[ "${runner_exec_mode}" == "root" ]]; then
+  log "runner execution mode: root fallback"
+else
+  log "runner execution mode: runner user"
+fi
+run_runner_bash "cd '${RUNNER_HOME}' && ./config.sh ${config_args[*]@Q}"
 runner_configured="true"
 
 log "starting runner ${RUNNER_NAME}"
-gosu runner bash -lc "cd '${RUNNER_HOME}' && exec ./run.sh" \
+run_runner_bash "cd '${RUNNER_HOME}' && exec ./run.sh" \
   2>&1 | tee -a "${RUNNER_LOG_DIR}/runner.log"

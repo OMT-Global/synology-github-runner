@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 
-FROM --platform=$BUILDPLATFORM debian:bookworm-slim
+FROM --platform=$TARGETPLATFORM debian:bookworm-slim
 
 ARG TARGETARCH
 ARG RUNNER_VERSION=2.333.0
@@ -45,4 +45,4 @@ RUN chmod 0755 /usr/local/bin/runner-entrypoint.sh
 HEALTHCHECK --interval=60s --timeout=10s --start-period=30s --retries=3 \
   CMD pgrep -f "Runner.Listener" > /dev/null || exit 1
 
-ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/runner-entrypoint.sh"]
+ENTRYPOINT ["/usr/bin/tini", "-s", "--", "/usr/local/bin/runner-entrypoint.sh"]

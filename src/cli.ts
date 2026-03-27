@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { loadConfig } from "./lib/config.js";
+import { collectConfigWarnings, loadConfig } from "./lib/config.js";
 import { renderCompose } from "./lib/compose.js";
 import { loadDeploymentEnv } from "./lib/env.js";
 import { fetchLatestRunnerRelease } from "./lib/github.js";
@@ -38,6 +38,7 @@ async function validateConfig(args: string[]): Promise<void> {
   });
   const configPath = getOption(args, "--config", "config/pools.yaml");
   const config = loadConfig(configPath!, env);
+  emitWarnings(config);
 
   process.stdout.write(
     JSON.stringify(
@@ -68,6 +69,7 @@ async function renderComposeCommand(args: string[]): Promise<void> {
   });
   const configPath = getOption(args, "--config", "config/pools.yaml");
   const config = loadConfig(configPath!, env);
+  emitWarnings(config);
   const compose = renderCompose(config, env);
 
   if (output) {
@@ -150,6 +152,12 @@ function printUsage(): void {
   pnpm check-runner-version [--current 2.333.0] [--env .env]
   pnpm runner-release-manifest [--current 2.333.0] [--env .env]
 `);
+}
+
+function emitWarnings(config: ReturnType<typeof loadConfig>): void {
+  for (const warning of collectConfigWarnings(config)) {
+    process.stderr.write(`warning: ${warning}\n`);
+  }
 }
 
 main().catch((error: unknown) => {
