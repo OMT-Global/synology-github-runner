@@ -18,13 +18,17 @@ fi
 
 shift
 
-PLATFORM="linux/arm64"
+DEFAULT_PLATFORM="linux/arm64"
+PUBLISH_PLATFORM="linux/amd64,linux/arm64"
+PLATFORM="${DEFAULT_PLATFORM}"
 PUSH_FLAG=""
+PLATFORM_WAS_SET=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --platform)
       PLATFORM="${2:?missing value for --platform}"
+      PLATFORM_WAS_SET=1
       shift 2
       ;;
     --push)
@@ -39,6 +43,10 @@ while [[ $# -gt 0 ]]; do
 done
 
 : "${RUNNER_VERSION:=2.333.0}"
+
+if [[ -n "${PUSH_FLAG}" && "${PLATFORM_WAS_SET}" -eq 0 ]]; then
+  PLATFORM="${PUBLISH_PLATFORM}"
+fi
 
 cd "${ROOT_DIR}"
 

@@ -7,11 +7,12 @@ import type { RunnerArchitecture } from "./runner-version.js";
 
 export type RunnerVisibility = "private" | "public";
 export type RepositoryAccess = "all" | "selected";
+export type RunnerPlatform = RunnerArchitecture | "auto";
 
 export interface PoolResources {
   cpus?: string;
   memory?: string;
-  pidsLimit: number;
+  pidsLimit?: number;
 }
 
 export interface PoolConfig {
@@ -23,7 +24,7 @@ export interface PoolConfig {
   allowedRepositories: string[];
   labels: string[];
   size: number;
-  architecture: RunnerArchitecture;
+  architecture: RunnerPlatform;
   runnerRoot: string;
   resources: PoolResources;
   imageRef: string;
@@ -40,13 +41,21 @@ export interface ResolvedConfig {
 
 export function collectConfigWarnings(config: ResolvedConfig): string[] {
   return config.pools.flatMap((pool) => {
-    if (!pool.resources.cpus) {
-      return [];
+    const warnings: string[] = [];
+
+    if (pool.resources.cpus) {
+      warnings.push(
+        `pool ${pool.key} sets resources.cpus=${pool.resources.cpus}; Synology kernels often reject Docker NanoCPUs/CPU CFS limits, so prefer omitting cpus unless you have verified support on your NAS`
+      );
     }
 
-    return [
-      `pool ${pool.key} sets resources.cpus=${pool.resources.cpus}; Synology kernels often reject Docker NanoCPUs/CPU CFS limits, so prefer omitting cpus unless you have verified support on your NAS`
-    ];
+    if (pool.resources.pidsLimit !== undefined) {
+      warnings.push(
+        `pool ${pool.key} sets resources.pidsLimit=${pool.resources.pidsLimit}; Synology kernels often reject Docker PID cgroup limits, so prefer omitting pidsLimit unless you have verified support on your NAS`
+      );
+    }
+
+    return warnings;
   });
 }
 
@@ -64,15 +73,15 @@ const poolSchema = z
       .default([]),
     labels: z.array(z.string().regex(/^[A-Za-z0-9._-]+$/)).default([]),
     size: z.number().int().min(1),
-    architecture: z.enum(["amd64", "arm64"]),
+    architecture: z.enum(["auto", "amd64", "arm64"]).default("auto"),
     runnerRoot: z.string().min(1),
     resources: z
       .object({
         cpus: z.string().regex(/^\d+(\.\d+)?$/).optional(),
         memory: z.string().min(1).optional(),
-        pidsLimit: z.number().int().positive().default(256)
+        pidsLimit: z.number().int().positive().optional()
       })
-      .default({ pidsLimit: 256 })
+      .default({})
   })
   .superRefine((pool, ctx) => {
     if (pool.repositoryAccess === "selected" && pool.allowedRepositories.length === 0) {
@@ -143,7 +152,7 @@ export function loadConfig(
       resources: {
         cpus: pool.resources.cpus,
         memory: pool.resources.memory,
-        pidsLimit: pool.resources.pidsLimit ?? 256
+        pidsLimit: pool.resources.pidsLimit
       },
       imageRef: `${result.image.repository}:${result.image.tag}`
     };

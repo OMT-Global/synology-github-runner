@@ -13,11 +13,10 @@ pools:
       - shell-only
       - private
     size: 2
-    architecture: arm64
+    architecture: auto
     runnerRoot: ${SYNOLOGY_RUNNER_BASE_DIR}/pools/synology-private
     resources:
       memory: 2g
-      pidsLimit: 256
   - key: synology-public
     visibility: public
     organization: omt-global
@@ -30,8 +29,7 @@ pools:
       - shell-only
       - public
     size: 1
-    architecture: arm64
+    architecture: auto
     runnerRoot: ${SYNOLOGY_RUNNER_BASE_DIR}/pools/synology-public
     resources:
       memory: 1g
-      pidsLimit: 192

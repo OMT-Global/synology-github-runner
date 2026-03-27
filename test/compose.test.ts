@@ -30,7 +30,9 @@ describe("renderCompose", () => {
     expect(privateService.volumes).toEqual([
       "/volume1/docker/synology-github-runner/pools/synology-private/runner-01:/volume1/docker/synology-github-runner/pools/synology-private/runner-01"
     ]);
+    expect(privateService).not.toHaveProperty("platform");
     expect(privateService).not.toHaveProperty("cpus");
+    expect(privateService).not.toHaveProperty("pids_limit");
     expect(JSON.stringify(privateService)).not.toContain("/var/run/docker.sock");
 
     const publicService = payload.services["synology-public-runner-01"];
@@ -38,7 +40,9 @@ describe("renderCompose", () => {
       RUNNER_REPOSITORY_ACCESS: "selected",
       RUNNER_ALLOWED_REPOSITORIES: "example/public-demo"
     });
+    expect(publicService).not.toHaveProperty("platform");
     expect(publicService).not.toHaveProperty("cpus");
+    expect(publicService).not.toHaveProperty("pids_limit");
   });
 });
 
@@ -59,11 +63,10 @@ function configFixture(): ResolvedConfig {
         allowedRepositories: [],
         labels: ["synology", "shell-only", "private"],
         size: 2,
-        architecture: "arm64",
+        architecture: "auto",
         runnerRoot: "/volume1/docker/synology-github-runner/pools/synology-private",
         resources: {
-          memory: "2g",
-          pidsLimit: 256
+          memory: "2g"
         },
         imageRef: "ghcr.io/example/synology-github-runner:0.1.0"
       },
@@ -76,11 +79,10 @@ function configFixture(): ResolvedConfig {
         allowedRepositories: ["example/public-demo"],
         labels: ["synology", "shell-only", "public"],
         size: 1,
-        architecture: "arm64",
+        architecture: "auto",
         runnerRoot: "/volume1/docker/synology-github-runner/pools/synology-public",
         resources: {
-          memory: "1g",
-          pidsLimit: 192
+          memory: "1g"
         },
         imageRef: "ghcr.io/example/synology-github-runner:0.1.0"
       }

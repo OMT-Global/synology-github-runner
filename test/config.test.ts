@@ -217,11 +217,47 @@ pools:
 
     const config = loadConfig(configPath, deploymentEnv());
 
-    expect(collectConfigWarnings(config)).toEqual([
+    expect(collectConfigWarnings(config)).toContainEqual(
       expect.stringMatching(
         /pool synology-private sets resources\.cpus=2\.0; Synology kernels often reject Docker NanoCPUs/
       )
-    ]);
+    );
+  });
+
+  test("warns when pid limits are configured", () => {
+    const directory = createTempDir();
+    const configPath = path.join(directory, "pools.yaml");
+
+    fs.writeFileSync(
+      configPath,
+      `version: 1
+image:
+  repository: ghcr.io/example/synology-github-runner
+  tag: 0.1.0
+pools:
+  - key: synology-private
+    visibility: private
+    organization: example
+    runnerGroup: synology-private
+    repositoryAccess: all
+    labels: []
+    size: 1
+    architecture: auto
+    runnerRoot: /volume1/docker/synology-github-runner/pools/synology-private
+    resources:
+      memory: 2g
+      pidsLimit: 256
+`,
+      "utf8"
+    );
+
+    const config = loadConfig(configPath, deploymentEnv());
+
+    expect(collectConfigWarnings(config)).toContainEqual(
+      expect.stringMatching(
+        /pool synology-private sets resources\.pidsLimit=256; Synology kernels often reject Docker PID cgroup limits/
+      )
+    );
   });
 
   test("does not warn when cpu limits are omitted", () => {

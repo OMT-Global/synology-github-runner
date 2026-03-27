@@ -64,7 +64,6 @@ function renderService(pool: PoolConfig, index: number): Record<string, unknown>
 
   const service: Record<string, unknown> = {
     image: pool.imageRef,
-    platform: `linux/${pool.architecture}`,
     container_name: buildServiceName(pool, index),
     hostname: buildRunnerName(pool, index),
     restart: "unless-stopped",
@@ -83,12 +82,19 @@ function renderService(pool: PoolConfig, index: number): Record<string, unknown>
           ? "all"
           : pool.allowedRepositories.join(","),
       "com.synology-gh-runner.shell-only": "true"
-    },
-    pids_limit: pool.resources.pidsLimit
+    }
   };
+
+  if (pool.architecture !== "auto") {
+    service.platform = `linux/${pool.architecture}`;
+  }
 
   if (pool.resources.cpus) {
     service.cpus = pool.resources.cpus;
+  }
+
+  if (pool.resources.pidsLimit !== undefined) {
+    service.pids_limit = pool.resources.pidsLimit;
   }
 
   if (pool.resources.memory) {

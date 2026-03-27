@@ -43,13 +43,17 @@ pnpm validate-config -- --config config/pools.yaml --env .env
 pnpm render-compose -- --config config/pools.yaml --env .env --output docker-compose.generated.yml
 ```
 
-If you set `resources.cpus`, `validate-config` and `render-compose` will warn because many Synology kernels reject Docker NanoCPUs/CPU CFS limits. The sample config omits CPU limits for that reason.
+The sample config uses `architecture: auto`, which lets Docker pull the native image variant from a multi-arch tag. If you pin `architecture` to `amd64` or `arm64`, Compose will force that platform explicitly.
+
+If you set `resources.cpus` or `resources.pidsLimit`, `validate-config` and `render-compose` will warn because many Synology kernels reject Docker NanoCPUs, CPU CFS quotas, and PID cgroup limits. The sample config omits both limits for that reason.
 
 6. Build the runner image:
 
 ```bash
-./scripts/build-image.sh ghcr.io/your-org/synology-github-runner:0.1.0 --platform linux/arm64
+./scripts/build-image.sh ghcr.io/your-org/synology-github-runner:0.1.0 --push
 ```
+
+When `--push` is used without an explicit `--platform`, the helper now defaults to `linux/amd64,linux/arm64` so the same tag works across Intel and ARM Synology models. A single-arch tag combined with the wrong `platform` or `architecture` setting will fail at startup with `Exec format error`.
 
 7. Deploy the generated compose file to Synology Container Manager and start the stack.
 
@@ -73,7 +77,7 @@ Recommended workflow labels:
 - No extra NAS shares should be mounted into the runner services.
 - Do not publish ports from the runner containers.
 - Keep resource limits enabled in `config/pools.yaml`.
-- Prefer memory and PID limits on Synology. Only set `resources.cpus` if you have verified your NAS kernel supports Docker CPU CFS quotas.
+- Prefer memory-only limits on Synology. Only set `resources.cpus` or `resources.pidsLimit` if you have verified your NAS kernel supports Docker CPU CFS quotas and PID cgroup limits.
 - For public pools, use DSM firewall rules to reduce unnecessary LAN reachability.
 - If you need `container:` jobs or service containers later, create a second runner class instead of weakening this one.
 
@@ -115,6 +119,7 @@ SMOKE_KEEP_ARTIFACTS=1 pnpm smoke-test
 - Build and launch both pools on the Synology NAS
 - Verify both runner groups appear online in GitHub
 - Verify the private runner group is set to the repo access policy you intend, such as "All repositories" for an org-wide private pool
+- Verify the generated compose file does not pin `platform:` unless you intentionally forced `architecture`
 - Run a private-repo shell workflow with secrets
 - Run a public-repo shell workflow without secrets
 - Confirm each job de-registers the runner and the service restarts cleanly
