@@ -30,6 +30,7 @@ describe("renderCompose", () => {
     expect(privateService.volumes).toEqual([
       "/volume1/docker/synology-github-runner/pools/synology-private/runner-01:/volume1/docker/synology-github-runner/pools/synology-private/runner-01"
     ]);
+    expect(privateService).not.toHaveProperty("init");
     expect(privateService).not.toHaveProperty("platform");
     expect(privateService).not.toHaveProperty("cpus");
     expect(privateService).not.toHaveProperty("pids_limit");
@@ -40,6 +41,7 @@ describe("renderCompose", () => {
       RUNNER_REPOSITORY_ACCESS: "selected",
       RUNNER_ALLOWED_REPOSITORIES: "example/public-demo"
     });
+    expect(publicService).not.toHaveProperty("init");
     expect(publicService).not.toHaveProperty("platform");
     expect(publicService).not.toHaveProperty("cpus");
     expect(publicService).not.toHaveProperty("pids_limit");

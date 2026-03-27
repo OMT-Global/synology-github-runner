@@ -67,7 +67,6 @@ function renderService(pool: PoolConfig, index: number): Record<string, unknown>
     container_name: buildServiceName(pool, index),
     hostname: buildRunnerName(pool, index),
     restart: "unless-stopped",
-    init: true,
     stop_grace_period: "2m",
     environment,
     volumes: [`${runnerStateDir}:${runnerStateDir}`],

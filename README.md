@@ -66,6 +66,7 @@ When `--push` is used without an explicit `--platform`, the helper now defaults 
 - `repositoryAccess: selected` requires `allowedRepositories` and documents the intended selected-repo set for that pool.
 - Public repos must not receive long-lived secrets from this runner class.
 - GitHub enforces repo access on the runner group side; this repo carries that policy into validation, metadata, and rendered compose output.
+- On Synology bind mounts that reject `chown`, the entrypoint falls back to root runner execution with `RUNNER_ALLOW_RUNASROOT=1` so the service can still start cleanly.
 
 Recommended workflow labels:
 
@@ -78,6 +79,7 @@ Recommended workflow labels:
 - Do not publish ports from the runner containers.
 - Keep resource limits enabled in `config/pools.yaml`.
 - Prefer memory-only limits on Synology. Only set `resources.cpus` or `resources.pidsLimit` if you have verified your NAS kernel supports Docker CPU CFS quotas and PID cgroup limits.
+- Do not add Compose `init: true` for these services. The image already uses `tini`, and double-init setups on Synology produce noisy subreaper warnings.
 - For public pools, use DSM firewall rules to reduce unnecessary LAN reachability.
 - If you need `container:` jobs or service containers later, create a second runner class instead of weakening this one.
 
