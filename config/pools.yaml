@@ -1,15 +1,13 @@
 version: 1
 image:
-  repository: ghcr.io/your-org/synology-github-runner
+  repository: ghcr.io/omt-global/synology-github-runner
   tag: 0.1.0
 pools:
   - key: synology-private
     visibility: private
-    organization: your-org
+    organization: omt-global
     runnerGroup: synology-private
-    allowedRepositories:
-      - your-org/private-app
-      - your-org/internal-tools
+    repositoryAccess: all
     labels:
       - synology
       - shell-only
@@ -18,15 +16,15 @@ pools:
     architecture: arm64
     runnerRoot: ${SYNOLOGY_RUNNER_BASE_DIR}/pools/synology-private
     resources:
-      cpus: "2.0"
       memory: 2g
       pidsLimit: 256
   - key: synology-public
     visibility: public
-    organization: your-org
+    organization: omt-global
     runnerGroup: synology-public
+    repositoryAccess: selected
     allowedRepositories:
-      - your-org/public-demo
+      - omt-global/public-demo
     labels:
       - synology
       - shell-only
@@ -35,6 +33,5 @@ pools:
     architecture: arm64
     runnerRoot: ${SYNOLOGY_RUNNER_BASE_DIR}/pools/synology-public
     resources:
-      cpus: "1.0"
       memory: 1g
       pidsLimit: 192

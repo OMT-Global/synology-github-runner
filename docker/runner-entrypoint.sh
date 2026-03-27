@@ -120,6 +120,7 @@ require_env RUNNER_WORK_DIR
 : "${RUNNER_SCOPE:=organization}"
 : "${RUNNER_EPHEMERAL:=true}"
 : "${RUNNER_DISABLE_UPDATE:=true}"
+: "${RUNNER_REPOSITORY_ACCESS:=selected}"
 
 if [[ "${RUNNER_SCOPE}" != "organization" ]]; then
   log "RUNNER_SCOPE=${RUNNER_SCOPE} is unsupported in v1; only organization runners are implemented"
@@ -160,7 +161,12 @@ fi
 cleanup_local_state
 
 log "configuring runner ${RUNNER_NAME} in group ${RUNNER_GROUP:-default}"
-log "allowed repositories: ${RUNNER_ALLOWED_REPOSITORIES:-unset}"
+log "repository access: ${RUNNER_REPOSITORY_ACCESS}"
+if [[ "${RUNNER_REPOSITORY_ACCESS}" == "all" ]]; then
+  log "allowed repositories: all repositories in ${GITHUB_ORG}"
+else
+  log "allowed repositories: ${RUNNER_ALLOWED_REPOSITORIES:-unset}"
+fi
 gosu runner bash -lc "cd '${RUNNER_HOME}' && ./config.sh ${config_args[*]@Q}"
 runner_configured="true"
 

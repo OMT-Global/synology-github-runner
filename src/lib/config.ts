@@ -6,6 +6,7 @@ import type { DeploymentEnv } from "./env.js";
 import type { RunnerArchitecture } from "./runner-version.js";
 
 export type RunnerVisibility = "private" | "public";
+export type RepositoryAccess = "all" | "selected";
 
 export interface PoolResources {
   cpus?: string;
@@ -18,6 +19,7 @@ export interface PoolConfig {
   visibility: RunnerVisibility;
   organization: string;
   runnerGroup: string;
+  repositoryAccess: RepositoryAccess;
   allowedRepositories: string[];
   labels: string[];
   size: number;
@@ -36,26 +38,61 @@ export interface ResolvedConfig {
   pools: PoolConfig[];
 }
 
-const poolSchema = z.object({
-  key: z.string().regex(/^[a-z0-9][a-z0-9-]*$/),
-  visibility: z.enum(["private", "public"]),
-  organization: z.string().min(1),
-  runnerGroup: z.string().min(1),
-  allowedRepositories: z
-    .array(z.string().regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/))
-    .min(1),
-  labels: z.array(z.string().regex(/^[A-Za-z0-9._-]+$/)).default([]),
-  size: z.number().int().min(1),
-  architecture: z.enum(["amd64", "arm64"]),
-  runnerRoot: z.string().min(1),
-  resources: z
-    .object({
-      cpus: z.string().regex(/^\d+(\.\d+)?$/).optional(),
-      memory: z.string().min(1).optional(),
-      pidsLimit: z.number().int().positive().default(256)
-    })
-    .default({ pidsLimit: 256 })
-});
+export function collectConfigWarnings(config: ResolvedConfig): string[] {
+  return config.pools.flatMap((pool) => {
+    if (!pool.resources.cpus) {
+      return [];
+    }
+
+    return [
+      `pool ${pool.key} sets resources.cpus=${pool.resources.cpus}; Synology kernels often reject Docker NanoCPUs/CPU CFS limits, so prefer omitting cpus unless you have verified support on your NAS`
+    ];
+  });
+}
+
+const repositoryPattern = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
+
+const poolSchema = z
+  .object({
+    key: z.string().regex(/^[a-z0-9][a-z0-9-]*$/),
+    visibility: z.enum(["private", "public"]),
+    organization: z.string().min(1),
+    runnerGroup: z.string().min(1),
+    repositoryAccess: z.enum(["all", "selected"]).default("selected"),
+    allowedRepositories: z
+      .array(z.string().regex(repositoryPattern))
+      .default([]),
+    labels: z.array(z.string().regex(/^[A-Za-z0-9._-]+$/)).default([]),
+    size: z.number().int().min(1),
+    architecture: z.enum(["amd64", "arm64"]),
+    runnerRoot: z.string().min(1),
+    resources: z
+      .object({
+        cpus: z.string().regex(/^\d+(\.\d+)?$/).optional(),
+        memory: z.string().min(1).optional(),
+        pidsLimit: z.number().int().positive().default(256)
+      })
+      .default({ pidsLimit: 256 })
+  })
+  .superRefine((pool, ctx) => {
+    if (pool.repositoryAccess === "selected" && pool.allowedRepositories.length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          "allowedRepositories must contain at least one repository when repositoryAccess is selected",
+        path: ["allowedRepositories"]
+      });
+    }
+
+    if (pool.repositoryAccess === "all" && pool.allowedRepositories.length > 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          "allowedRepositories must be omitted when repositoryAccess is all",
+        path: ["allowedRepositories"]
+      });
+    }
+  });
 
 const configSchema = z.object({
   version: z.literal(1),
@@ -83,12 +120,14 @@ export function loadConfig(
     }
     seenKeys.add(pool.key);
 
-    for (const repository of pool.allowedRepositories) {
-      const [owner] = repository.split("/");
-      if (owner !== pool.organization) {
-        throw new Error(
-          `pool ${pool.key} includes ${repository}, which is outside organization ${pool.organization}`
-        );
+    if (pool.repositoryAccess === "selected") {
+      for (const repository of pool.allowedRepositories) {
+        const [owner] = repository.split("/");
+        if (owner !== pool.organization) {
+          throw new Error(
+            `pool ${pool.key} includes ${repository}, which is outside organization ${pool.organization}`
+          );
+        }
       }
     }
 

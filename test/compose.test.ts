@@ -21,12 +21,24 @@ describe("renderCompose", () => {
     expect(privateService.environment).toMatchObject({
       RUNNER_GROUP: "synology-private",
       RUNNER_LABELS: "synology,shell-only,private",
-      RUNNER_SCOPE: "organization"
+      RUNNER_SCOPE: "organization",
+      RUNNER_REPOSITORY_ACCESS: "all"
     });
+    expect(privateService.environment).not.toHaveProperty(
+      "RUNNER_ALLOWED_REPOSITORIES"
+    );
     expect(privateService.volumes).toEqual([
       "/volume1/docker/synology-github-runner/pools/synology-private/runner-01:/volume1/docker/synology-github-runner/pools/synology-private/runner-01"
     ]);
+    expect(privateService).not.toHaveProperty("cpus");
     expect(JSON.stringify(privateService)).not.toContain("/var/run/docker.sock");
+
+    const publicService = payload.services["synology-public-runner-01"];
+    expect(publicService.environment).toMatchObject({
+      RUNNER_REPOSITORY_ACCESS: "selected",
+      RUNNER_ALLOWED_REPOSITORIES: "example/public-demo"
+    });
+    expect(publicService).not.toHaveProperty("cpus");
   });
 });
 
@@ -43,13 +55,13 @@ function configFixture(): ResolvedConfig {
         visibility: "private",
         organization: "example",
         runnerGroup: "synology-private",
-        allowedRepositories: ["example/private-app"],
+        repositoryAccess: "all",
+        allowedRepositories: [],
         labels: ["synology", "shell-only", "private"],
         size: 2,
         architecture: "arm64",
         runnerRoot: "/volume1/docker/synology-github-runner/pools/synology-private",
         resources: {
-          cpus: "2.0",
           memory: "2g",
           pidsLimit: 256
         },
@@ -60,13 +72,13 @@ function configFixture(): ResolvedConfig {
         visibility: "public",
         organization: "example",
         runnerGroup: "synology-public",
+        repositoryAccess: "selected",
         allowedRepositories: ["example/public-demo"],
         labels: ["synology", "shell-only", "public"],
         size: 1,
         architecture: "arm64",
         runnerRoot: "/volume1/docker/synology-github-runner/pools/synology-public",
         resources: {
-          cpus: "1.0",
           memory: "1g",
           pidsLimit: 192
         },

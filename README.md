@@ -24,7 +24,7 @@ This v1 runner class supports shell jobs, JavaScript actions, and composite acti
 ## Quick Start
 
 1. Copy `.env.example` to `.env` and set `GITHUB_PAT`.
-2. Edit `config/pools.yaml` for your organization, runner groups, and repo allow-lists.
+2. Edit `config/pools.yaml` for your organization, runner groups, and repository access policy.
 3. Install dependencies:
 
 ```bash
@@ -43,6 +43,8 @@ pnpm validate-config -- --config config/pools.yaml --env .env
 pnpm render-compose -- --config config/pools.yaml --env .env --output docker-compose.generated.yml
 ```
 
+If you set `resources.cpus`, `validate-config` and `render-compose` will warn because many Synology kernels reject Docker NanoCPUs/CPU CFS limits. The sample config omits CPU limits for that reason.
+
 6. Build the runner image:
 
 ```bash
@@ -56,7 +58,10 @@ pnpm render-compose -- --config config/pools.yaml --env .env --output docker-com
 - Each service handles one job, de-registers, and restarts cleanly.
 - GitHub registration and removal both use short-lived tokens minted from the configured PAT.
 - Public and private repos use separate runner groups and labels.
+- `repositoryAccess: all` is the org-wide mode for a runner group.
+- `repositoryAccess: selected` requires `allowedRepositories` and documents the intended selected-repo set for that pool.
 - Public repos must not receive long-lived secrets from this runner class.
+- GitHub enforces repo access on the runner group side; this repo carries that policy into validation, metadata, and rendered compose output.
 
 Recommended workflow labels:
 
@@ -68,6 +73,7 @@ Recommended workflow labels:
 - No extra NAS shares should be mounted into the runner services.
 - Do not publish ports from the runner containers.
 - Keep resource limits enabled in `config/pools.yaml`.
+- Prefer memory and PID limits on Synology. Only set `resources.cpus` if you have verified your NAS kernel supports Docker CPU CFS quotas.
 - For public pools, use DSM firewall rules to reduce unnecessary LAN reachability.
 - If you need `container:` jobs or service containers later, create a second runner class instead of weakening this one.
 
@@ -108,6 +114,7 @@ SMOKE_KEEP_ARTIFACTS=1 pnpm smoke-test
 
 - Build and launch both pools on the Synology NAS
 - Verify both runner groups appear online in GitHub
+- Verify the private runner group is set to the repo access policy you intend, such as "All repositories" for an org-wide private pool
 - Run a private-repo shell workflow with secrets
 - Run a public-repo shell workflow without secrets
 - Confirm each job de-registers the runner and the service restarts cleanly
