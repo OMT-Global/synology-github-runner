@@ -50,7 +50,7 @@ If you set `resources.cpus` or `resources.pidsLimit`, `validate-config` and `ren
 6. Build the runner image:
 
 ```bash
-./scripts/build-image.sh ghcr.io/your-org/synology-github-runner:0.1.1 --push
+./scripts/build-image.sh ghcr.io/your-org/synology-github-runner:0.1.2 --push
 ```
 
 When `--push` is used without an explicit `--platform`, the helper now defaults to `linux/amd64,linux/arm64` so the same tag works across Intel and ARM Synology models. A single-arch tag combined with the wrong `platform` or `architecture` setting will fail at startup with `Exec format error`.
@@ -66,7 +66,8 @@ When `--push` is used without an explicit `--platform`, the helper now defaults 
 - `repositoryAccess: selected` requires `allowedRepositories` and documents the intended selected-repo set for that pool.
 - Public repos must not receive long-lived secrets from this runner class.
 - GitHub enforces repo access on the runner group side; this repo carries that policy into validation, metadata, and rendered compose output.
-- On Synology bind mounts that reject `chown`, the entrypoint falls back to root runner execution with `RUNNER_ALLOW_RUNASROOT=1` so the service can still start cleanly.
+- The image keeps the official runner bundle under `/actions-runner` as a read-only source and copies it into a writable per-runner home under `RUNNER_STATE_DIR` before startup.
+- On Synology bind mounts that reject `chown`, the entrypoint falls back to root runner execution with `RUNNER_ALLOW_RUNASROOT=1` so the service can still start cleanly from that writable runner home.
 
 Recommended workflow labels:
 
@@ -105,7 +106,7 @@ The smoke test:
 
 - builds the local runner image
 - starts a mock GitHub token API on an isolated Docker network
-- mounts stubbed `config.sh` and `run.sh` files into `/actions-runner`
+- mounts stubbed `config.sh` and `run.sh` files into `/actions-runner` as the read-only runner source
 - verifies registration token fetch, runner config flags, run invocation, remove token fetch, and cleanup
 
 Useful overrides:

@@ -114,12 +114,15 @@ docker_cmd run --rm \
   -e RUNNER_LOG_DIR=/tmp/runner-state/logs \
   -e RUNNER_WORK_DIR=/tmp/runner-state/_work \
   -v "${STATE_DIR}:/tmp/runner-state" \
-  -v "${ACTIONS_RUNNER_DIR}:/actions-runner" \
+  -v "${ACTIONS_RUNNER_DIR}:/actions-runner:ro" \
   "${IMAGE_REF}" | tee "${RUNNER_STDOUT}"
 
 grep -q "POST /orgs/test-org/actions/runners/registration-token" "${LOG_DIR}/mock-api.log"
 grep -q "POST /orgs/test-org/actions/runners/remove-token" "${LOG_DIR}/mock-api.log"
 grep -q -- "--runnergroup synology-private --ephemeral --disableupdate" "${STATE_DIR}/config-invocations.log"
+grep -q "config path: /tmp/runner-state/runner-home" "${STATE_DIR}/config-context.log"
+grep -q "run path: /tmp/runner-state/runner-home" "${STATE_DIR}/run-context.log"
+grep -q "runner writable home: /tmp/runner-state/runner-home" "${RUNNER_STDOUT}"
 grep -q "^job output$" "${STATE_DIR}/logs/runner.log"
 grep -q "run.sh stub executed" "${STATE_DIR}/run.log"
 grep -q "runner registration removed cleanly" "${RUNNER_STDOUT}"
