@@ -3,7 +3,11 @@ import path from "node:path";
 import { collectConfigWarnings, loadConfig } from "./lib/config.js";
 import { renderCompose } from "./lib/compose.js";
 import { loadDeploymentEnv } from "./lib/env.js";
-import { fetchLatestRunnerRelease, verifyRunnerGroups } from "./lib/github.js";
+import {
+  fetchLatestRunnerRelease,
+  verifyContainerImageTag,
+  verifyRunnerGroups
+} from "./lib/github.js";
 import {
   buildRunnerDownloadUrl,
   summarizeRunnerVersion
@@ -18,6 +22,9 @@ async function main(): Promise<void> {
       break;
     case "validate-github":
       await validateGitHub(args);
+      break;
+    case "validate-image":
+      await validateImage(args);
       break;
     case "render-compose":
       await renderComposeCommand(args);
@@ -115,6 +122,34 @@ async function validateGitHub(args: string[]): Promise<void> {
   );
 }
 
+async function validateImage(args: string[]): Promise<void> {
+  const env = loadDeploymentEnv({
+    envPath: getOption(args, "--env", ".env"),
+    requirePat: true
+  });
+  const configPath = getOption(args, "--config", "config/pools.yaml");
+  const config = loadConfig(configPath!, env);
+  emitWarnings(config);
+  const imageRef = `${config.image.repository}:${config.image.tag}`;
+
+  const match = await verifyContainerImageTag(
+    env.githubApiUrl,
+    env.githubPat!,
+    imageRef
+  );
+
+  process.stdout.write(
+    `${JSON.stringify(
+      {
+        ok: true,
+        image: match
+      },
+      null,
+      2
+    )}\n`
+  );
+}
+
 async function checkRunnerVersion(args: string[]): Promise<void> {
   const env = loadDeploymentEnv({
     envPath: getOption(args, "--env", ".env"),
@@ -183,6 +218,7 @@ function printUsage(): void {
   process.stderr.write(`Usage:
   pnpm validate-config [--config config/pools.yaml] [--env .env]
   pnpm validate-github [--config config/pools.yaml] [--env .env]
+  pnpm validate-image [--config config/pools.yaml] [--env .env]
   pnpm render-compose [--config config/pools.yaml] [--env .env] [--output docker-compose.generated.yml]
   pnpm check-runner-version [--current 2.333.0] [--env .env]
   pnpm runner-release-manifest [--current 2.333.0] [--env .env]

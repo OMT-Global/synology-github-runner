@@ -57,6 +57,12 @@ describe("loadDeploymentEnv", () => {
     expect(env.composeProjectName).toBe("synology-github-runner");
     expect(env.runnerVersion).toBe("2.333.0");
     expect(env.githubPat).toBeUndefined();
+    expect(env.raw).toMatchObject({
+      GITHUB_API_URL: "https://api.github.com",
+      SYNOLOGY_RUNNER_BASE_DIR: "/volume1/docker/synology-github-runner",
+      COMPOSE_PROJECT_NAME: "synology-github-runner",
+      RUNNER_VERSION: "2.333.0"
+    });
   });
 
   test("throws when GITHUB_PAT is required but missing", () => {

@@ -68,7 +68,29 @@ If you set `resources.cpus` or `resources.pidsLimit`, `validate-config` and `ren
 
 When `--push` is used without an explicit `--platform`, the helper now defaults to `linux/amd64,linux/arm64` so the same tag works across Intel and ARM Synology models. A single-arch tag combined with the wrong `platform` or `architecture` setting will fail at startup with `Exec format error`.
 
+Before you deploy a pushed tag, validate that the configured image tag is actually present in GHCR:
+
+```bash
+pnpm validate-image -- --config config/pools.yaml --env .env
+```
+
 8. Deploy the generated compose file to Synology Container Manager and start the stack.
+
+## Publishing A Release Image
+
+Use [release-image.yml](/Users/johnteneyckjr./src/synology-github-runner/.github/workflows/release-image.yml) for published tags instead of relying on an ad hoc local push. The workflow runs on GitHub-hosted runners, not the Synology shell-only pool, because it needs multi-arch Buildx, QEMU, and registry publish support.
+
+The release workflow:
+
+- validates `config/pools.yaml`
+- runs the local `pnpm smoke-test` contract on `linux/amd64`
+- publishes the configured tag from `config/pools.yaml`
+- verifies the pushed tag with `docker buildx imagetools inspect`
+- confirms both `linux/amd64` and `linux/arm64` are present
+- retries `pnpm validate-image` until the GitHub Packages API sees the new tag
+- runs post-publish toolchain checks for both `linux/amd64` and `linux/arm64`
+
+Only point [config/pools.yaml](/Users/johnteneyckjr./src/synology-github-runner/config/pools.yaml) at a tag that this workflow has already published and verified.
 
 ## Runtime Contract
 
@@ -105,6 +127,7 @@ Recommended workflow labels:
 ```bash
 pnpm validate-config -- --config config/pools.yaml --env .env
 pnpm validate-github -- --config config/pools.yaml --env .env
+pnpm validate-image -- --config config/pools.yaml --env .env
 pnpm render-compose -- --config config/pools.yaml --env .env --output docker-compose.generated.yml
 pnpm check-runner-version -- --env .env
 pnpm runner-release-manifest -- --env .env

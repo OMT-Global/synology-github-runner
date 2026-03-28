@@ -5,6 +5,7 @@ import {
   fetchOrganizationRunnerGroups,
   fetchLatestRunnerRelease,
   fetchRunnerToken,
+  verifyContainerImageTag,
   verifyRunnerGroups
 } from "../src/lib/github.js";
 
@@ -241,5 +242,106 @@ describe("github runner API helpers", () => {
     await expect(
       fetchLatestRunnerRelease("https://api.github.com", "secret", fetchMock)
     ).rejects.toThrow(/failed with 404/);
+  });
+
+  test("verifies a published GHCR tag through the organization package API", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () =>
+        JSON.stringify([
+          {
+            id: 101,
+            updated_at: "2026-03-28T16:29:47Z",
+            metadata: {
+              container: {
+                tags: ["0.1.5", "latest"]
+              }
+            }
+          }
+        ])
+    });
+
+    await expect(
+      verifyContainerImageTag(
+        "https://api.github.com",
+        "secret",
+        "ghcr.io/omt-global/synology-github-runner:0.1.5",
+        fetchMock
+      )
+    ).resolves.toEqual({
+      imageRef: "ghcr.io/omt-global/synology-github-runner:0.1.5",
+      owner: "omt-global",
+      packageName: "synology-github-runner",
+      tag: "0.1.5",
+      versionId: 101,
+      updatedAt: "2026-03-28T16:29:47Z",
+      ownerType: "orgs"
+    });
+  });
+
+  test("falls back to user package lookup when org scope is missing", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 404,
+        text: async () => "Not Found"
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify([
+            {
+              id: 77,
+              metadata: {
+                container: {
+                  tags: ["0.1.5"]
+                }
+              }
+            }
+          ])
+      });
+
+    await expect(
+      verifyContainerImageTag(
+        "https://api.github.com",
+        "secret",
+        "ghcr.io/jmcte/synology-github-runner:0.1.5",
+        fetchMock
+      )
+    ).resolves.toMatchObject({
+      owner: "jmcte",
+      ownerType: "users",
+      versionId: 77
+    });
+  });
+
+  test("fails when the package exists but the configured tag is missing", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () =>
+        JSON.stringify([
+          {
+            id: 101,
+            metadata: {
+              container: {
+                tags: ["0.1.4", "latest"]
+              }
+            }
+          }
+        ])
+    });
+
+    await expect(
+      verifyContainerImageTag(
+        "https://api.github.com",
+        "secret",
+        "ghcr.io/omt-global/synology-github-runner:0.1.5",
+        fetchMock
+      )
+    ).rejects.toThrow(/does not include tag 0\.1\.5; available tags: 0\.1\.4, latest/);
   });
 });

@@ -18,7 +18,8 @@
     "smoke-test": "bash scripts/smoke-test.sh",
     "test": "vitest run",
     "validate-config": "tsx src/cli.ts validate-config",
-    "validate-github": "tsx src/cli.ts validate-github"
+    "validate-github": "tsx src/cli.ts validate-github",
+    "validate-image": "tsx src/cli.ts validate-image"
   },
   "dependencies": {
     "dotenv": "^17.3.1",
