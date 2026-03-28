@@ -25,9 +25,13 @@ jobs:
       - synology
       - shell-only
       - private
+    env:
+      RUNNER_TEMP: /tmp/github-runner-temp
+      RUNNER_TOOL_CACHE: /tmp/github-runner-tool-cache
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v6
+      - run: mkdir -p "$RUNNER_TEMP" "$RUNNER_TOOL_CACHE"
       - uses: pnpm/action-setup@v5
         with:
           version: 10.32.1
