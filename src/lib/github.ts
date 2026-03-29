@@ -20,6 +20,16 @@ export interface GitHubRunnerGroup {
   isDefault?: boolean;
 }
 
+export interface GitHubContainerImageVersion {
+  imageRef: string;
+  owner: string;
+  packageName: string;
+  tag: string;
+  versionId: number;
+  updatedAt?: string;
+  ownerType: "orgs" | "users";
+}
+
 export interface RunnerGroupExpectation {
   poolKey: string;
   organization: string;
@@ -245,6 +255,133 @@ export async function verifyRunnerGroups(
   });
 }
 
+export async function verifyContainerImageTag(
+  apiUrl: string,
+  token: string,
+  imageRef: string,
+  fetchImpl: FetchLike = fetch as FetchLike
+): Promise<GitHubContainerImageVersion> {
+  const parsed = parseGhcrImageRef(imageRef);
+  const attemptedScopes: Array<"orgs" | "users"> = ["orgs", "users"];
+  const seenTags = new Set<string>();
+
+  for (const ownerType of attemptedScopes) {
+    let sawPackage = false;
+
+    for (let page = 1; page <= 10; page += 1) {
+      const response = await fetchImpl(
+        `${trimApiUrl(apiUrl)}/${ownerType}/${parsed.owner}/packages/container/${encodeURIComponent(
+          parsed.packageName
+        )}/versions?per_page=100&page=${page}`,
+        {
+          method: "GET",
+          headers: buildGitHubApiHeaders(token)
+        }
+      );
+
+      const body = await response.text();
+      if (response.status === 404) {
+        break;
+      }
+
+      if (!response.ok) {
+        throw new Error(
+          `GitHub container package lookup failed for ${imageRef} with ${response.status}: ${body}`
+        );
+      }
+
+      sawPackage = true;
+      const versions = parseContainerPackageVersions(body, imageRef);
+      if (versions.length === 0) {
+        break;
+      }
+
+      for (const version of versions) {
+        for (const versionTag of version.tags) {
+          seenTags.add(versionTag);
+        }
+
+        if (version.tags.includes(parsed.tag)) {
+          return {
+            imageRef,
+            owner: parsed.owner,
+            packageName: parsed.packageName,
+            tag: parsed.tag,
+            versionId: version.id,
+            updatedAt: version.updatedAt,
+            ownerType
+          };
+        }
+      }
+    }
+
+    if (sawPackage) {
+      const availableTags = [...seenTags].sort().join(", ") || "none";
+      throw new Error(
+        `GitHub container package ${parsed.owner}/${parsed.packageName} does not include tag ${parsed.tag}; available tags: ${availableTags}`
+      );
+    }
+  }
+
+  throw new Error(
+    `GitHub container package ${parsed.owner}/${parsed.packageName} was not found for ${imageRef}`
+  );
+}
+
 function trimApiUrl(value: string): string {
   return value.replace(/\/+$/, "");
+}
+
+function parseGhcrImageRef(
+  imageRef: string
+): { owner: string; packageName: string; tag: string } {
+  const match = imageRef.match(/^ghcr\.io\/([^/]+)\/(.+):([^:@/]+)$/);
+
+  if (!match) {
+    throw new Error(
+      `image reference ${imageRef} must match ghcr.io/<owner>/<package>:<tag>`
+    );
+  }
+
+  const [, owner, packageName, tag] = match;
+  return { owner, packageName, tag };
+}
+
+function parseContainerPackageVersions(
+  body: string,
+  imageRef: string
+): Array<{ id: number; updatedAt?: string; tags: string[] }> {
+  const payload = JSON.parse(body) as Array<{
+    id?: number;
+    updated_at?: string;
+    metadata?: {
+      container?: {
+        tags?: string[];
+      };
+    };
+  }>;
+
+  if (!Array.isArray(payload)) {
+    throw new Error(
+      `GitHub container package response for ${imageRef} did not return an array`
+    );
+  }
+
+  return payload.map((version) => {
+    if (typeof version.id !== "number") {
+      throw new Error(
+        `GitHub container package response for ${imageRef} included an invalid version entry`
+      );
+    }
+
+    return {
+      id: version.id,
+      updatedAt: version.updated_at,
+      tags: Array.isArray(version.metadata?.container?.tags)
+        ? version.metadata.container.tags.filter(
+            (tag): tag is string => typeof tag === "string"
+          )
+        : []
+    };
+  });
 }

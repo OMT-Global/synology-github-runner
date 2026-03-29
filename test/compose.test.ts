@@ -14,7 +14,8 @@ describe("renderCompose", () => {
     expect(Object.keys(payload.services)).toEqual([
       "synology-private-runner-01",
       "synology-private-runner-02",
-      "synology-public-runner-01"
+      "synology-public-runner-01",
+      "synology-public-runner-02"
     ]);
 
     const privateService = payload.services["synology-private-runner-01"];
@@ -22,7 +23,11 @@ describe("renderCompose", () => {
       RUNNER_GROUP: "synology-private",
       RUNNER_LABELS: "synology,shell-only,private",
       RUNNER_SCOPE: "organization",
-      RUNNER_REPOSITORY_ACCESS: "all"
+      RUNNER_REPOSITORY_ACCESS: "all",
+      RUNNER_WORK_DIR: "/tmp/github-runner-work",
+      RUNNER_TEMP: "/tmp/github-runner-temp",
+      RUNNER_TOOL_CACHE: "/opt/hostedtoolcache",
+      AGENT_TOOLSDIRECTORY: "/opt/hostedtoolcache"
     });
     expect(privateService.environment).not.toHaveProperty(
       "RUNNER_ALLOWED_REPOSITORIES"
@@ -30,6 +35,8 @@ describe("renderCompose", () => {
     expect(privateService.volumes).toEqual([
       "/volume1/docker/synology-github-runner/pools/synology-private/runner-01:/volume1/docker/synology-github-runner/pools/synology-private/runner-01"
     ]);
+    expect(privateService.security_opt).toEqual(["no-new-privileges:true"]);
+    expect(privateService.cap_drop).toEqual(["ALL"]);
     expect(privateService).not.toHaveProperty("init");
     expect(privateService).not.toHaveProperty("platform");
     expect(privateService).not.toHaveProperty("cpus");
@@ -53,7 +60,7 @@ function configFixture(): ResolvedConfig {
     version: 1,
     image: {
       repository: "ghcr.io/example/synology-github-runner",
-      tag: "0.1.3"
+      tag: "0.1.5"
     },
     pools: [
       {
@@ -70,7 +77,7 @@ function configFixture(): ResolvedConfig {
         resources: {
           memory: "2g"
         },
-        imageRef: "ghcr.io/example/synology-github-runner:0.1.3"
+        imageRef: "ghcr.io/example/synology-github-runner:0.1.5"
       },
       {
         key: "synology-public",
@@ -80,13 +87,13 @@ function configFixture(): ResolvedConfig {
         repositoryAccess: "selected",
         allowedRepositories: ["example/public-demo"],
         labels: ["synology", "shell-only", "public"],
-        size: 1,
+        size: 2,
         architecture: "auto",
         runnerRoot: "/volume1/docker/synology-github-runner/pools/synology-public",
         resources: {
           memory: "1g"
         },
-        imageRef: "ghcr.io/example/synology-github-runner:0.1.3"
+        imageRef: "ghcr.io/example/synology-github-runner:0.1.5"
       }
     ]
   };

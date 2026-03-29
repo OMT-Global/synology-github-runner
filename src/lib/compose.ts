@@ -53,7 +53,10 @@ function renderService(pool: PoolConfig, index: number): Record<string, unknown>
     RUNNER_REPOSITORY_ACCESS: pool.repositoryAccess,
     RUNNER_STATE_DIR: runnerStateDir,
     RUNNER_LOG_DIR: `${runnerStateDir}/logs`,
-    RUNNER_WORK_DIR: `${runnerStateDir}/_work`,
+    RUNNER_WORK_DIR: "/tmp/github-runner-work",
+    RUNNER_TEMP: "/tmp/github-runner-temp",
+    RUNNER_TOOL_CACHE: "/opt/hostedtoolcache",
+    AGENT_TOOLSDIRECTORY: "/opt/hostedtoolcache",
     RUNNER_EPHEMERAL: "true",
     RUNNER_DISABLE_UPDATE: "true"
   };

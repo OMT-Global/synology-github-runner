@@ -5,6 +5,11 @@ Shell-only, ephemeral GitHub self-hosted runner pools for Synology NAS deploymen
 ## What This Repo Builds
 
 - A custom multi-arch runner image based on the official `actions/runner` tarballs
+- Built-in shell-job baseline tooling:
+  - Node.js `18.20.8`
+  - Python `3.12`
+  - Terraform `1.6.6`
+  - `git`, `bash`, `tar`, `zstd`, and `procps`
 - No Docker socket mounts
 - No privileged containers
 - No host-network mode
@@ -12,7 +17,7 @@ Shell-only, ephemeral GitHub self-hosted runner pools for Synology NAS deploymen
   - `synology-private`
   - `synology-public`
 
-This v1 runner class supports shell jobs, JavaScript actions, and composite actions. It does not support Docker-based actions, `container:` jobs, or service containers.
+This v1 runner class supports shell jobs, JavaScript actions, composite actions, the bundled shell-safe Node setup action, built-in Python `3.12` workflows, and Terraform CLI workflows. It does not support Docker-based actions, `container:` jobs, or service containers.
 
 ## Repo Layout
 
@@ -58,12 +63,38 @@ If you set `resources.cpus` or `resources.pidsLimit`, `validate-config` and `ren
 7. Build the runner image:
 
 ```bash
-./scripts/build-image.sh ghcr.io/your-org/synology-github-runner:0.1.3 --push
+./scripts/build-image.sh ghcr.io/your-org/synology-github-runner:0.1.6 --push
 ```
 
 When `--push` is used without an explicit `--platform`, the helper now defaults to `linux/amd64,linux/arm64` so the same tag works across Intel and ARM Synology models. A single-arch tag combined with the wrong `platform` or `architecture` setting will fail at startup with `Exec format error`.
 
+Before you deploy a pushed tag, validate that the configured image tag is actually present in GHCR:
+
+```bash
+pnpm validate-image -- --config config/pools.yaml --env .env
+```
+
 8. Deploy the generated compose file to Synology Container Manager and start the stack.
+
+## Publishing A Release Image
+
+Use [release-image.yml](/Users/johnteneyckjr./src/synology-github-runner/.github/workflows/release-image.yml) for published tags instead of relying on an ad hoc local push. The workflow runs on GitHub-hosted runners, not the Synology shell-only pool, because it needs multi-arch Buildx, QEMU, and registry publish support.
+
+The release workflow:
+
+- enforces that `package.json` version matches `config/pools.yaml` image tag
+- validates `config/pools.yaml`
+- runs the local `pnpm smoke-test` contract on `linux/amd64`
+- publishes the configured tag from `config/pools.yaml`
+- verifies the pushed tag with `docker buildx imagetools inspect`
+- confirms both `linux/amd64` and `linux/arm64` are present
+- retries `pnpm validate-image` until the GitHub Packages API sees the new tag
+- runs post-publish toolchain checks for both `linux/amd64` and `linux/arm64`
+- can create the matching GitHub release tag `v<version>` when dispatched from `main` with `publish_project_release=true`
+
+Only point [config/pools.yaml](/Users/johnteneyckjr./src/synology-github-runner/config/pools.yaml) at a tag that this workflow has already published and verified.
+
+If you want the repository release and GHCR image tag to stay aligned, merge the version bump to `main` first and then run the release workflow from `main` with `publish_project_release=true`. That will create the repo tag and GitHub Release after the image publish/verify steps succeed.
 
 ## Runtime Contract
 
@@ -75,6 +106,9 @@ When `--push` is used without an explicit `--platform`, the helper now defaults 
 - Public repos must not receive long-lived secrets from this runner class.
 - GitHub enforces repo access on the runner group side; this repo carries that policy into validation, metadata, and rendered compose output.
 - The image keeps the official runner bundle under `/actions-runner` as a read-only source and copies it into a writable per-runner home under `RUNNER_STATE_DIR` before startup.
+- The runner work tree is container-local at `RUNNER_WORK_DIR=/tmp/github-runner-work` so Actions temp extraction does not inherit Synology bind-mount ownership restrictions.
+- The image exposes a dedicated container-local Actions temp directory at `RUNNER_TEMP=/tmp/github-runner-temp` and a hosted tool cache at `RUNNER_TOOL_CACHE=/opt/hostedtoolcache` so shell-safe tool bootstrap actions do not depend on Synology bind-mount ownership semantics.
+- In root-fallback mode, the entrypoint will recreate those container-local runtime directories if Synology rejects an in-place permission refresh, instead of crashing the container during startup.
 - On Synology bind mounts that reject `chown`, the entrypoint falls back to root runner execution with `RUNNER_ALLOW_RUNASROOT=1` so the service can still start cleanly from that writable runner home.
 - The writable-home copy intentionally extracts without restoring archive ownership, so Synology mounts do not emit a `tar: Cannot change ownership ... Operation not permitted` line for every runner file.
 
@@ -82,6 +116,30 @@ Recommended workflow labels:
 
 - Private repos: `runs-on: [self-hosted, synology, shell-only, private]`
 - Public repos: `runs-on: [self-hosted, synology, shell-only, public]`
+
+## Reusable Setup Actions
+
+For Node projects on shell-only runners, use the bundled action instead of `actions/setup-node`:
+
+```yaml
+- uses: OMT-Global/synology-github-runner/actions/setup-shell-safe-node@main
+  with:
+    node-version: 24.14.1
+```
+
+Use that action on self-hosted Synology runners where `actions/setup-node` would otherwise fail while extracting tool archives. Keep `actions/setup-node` on GitHub-hosted jobs.
+
+The shell-only runner image directly supports these job profiles without Docker or service containers:
+
+- Node `18` plus `npm` with `actions/cache`
+- Node `24` when bootstrapped through `OMT-Global/synology-github-runner/actions/setup-shell-safe-node`
+- Python `3.12` plus `pip` with `actions/cache`
+- Terraform `1.6.6` plus plugin-cache directories under `RUNNER_TEMP`
+- Bash/docs validation jobs that only need the standard CLI toolchain
+
+For Python projects, the runner image already carries Python `3.12`. Repos that only need `3.12` can run directly on the shell-only pool. Repos with Python version matrices should keep the non-`3.12` lanes on GitHub-hosted runners and only route the `3.12` lane to self-hosted runners.
+
+For OpenClaw Ouro style workflows, the compatible jobs are the Node/npm validators, docs checks, Python `3.12` linting, Terraform validation, and smoke scripts that stay within bash plus the baked-in toolchain. Keep workflow-parser jobs that rely on extra distro packages, plus any `container:`, `services:`, browser, or Docker-daemon jobs, on GitHub-hosted runners.
 
 ## Security Notes
 
@@ -98,6 +156,7 @@ Recommended workflow labels:
 ```bash
 pnpm validate-config -- --config config/pools.yaml --env .env
 pnpm validate-github -- --config config/pools.yaml --env .env
+pnpm validate-image -- --config config/pools.yaml --env .env
 pnpm render-compose -- --config config/pools.yaml --env .env --output docker-compose.generated.yml
 pnpm check-runner-version -- --env .env
 pnpm runner-release-manifest -- --env .env
@@ -135,5 +194,7 @@ SMOKE_KEEP_ARTIFACTS=1 pnpm smoke-test
 - Verify the generated compose file does not pin `platform:` unless you intentionally forced `architecture`
 - Run a private-repo shell workflow with secrets
 - Run a public-repo shell workflow without secrets
+- Run a self-hosted workflow that uses `OMT-Global/synology-github-runner/actions/setup-shell-safe-node@<ref>`
+- Verify `python3 --version` reports `3.12.x` and `terraform version` reports `1.6.6`
 - Confirm each job de-registers the runner and the service restarts cleanly
 - Confirm there is no Docker socket mount in the rendered compose file

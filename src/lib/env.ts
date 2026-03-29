@@ -43,18 +43,29 @@ export function loadDeploymentEnv(
     );
   }
 
+  const githubApiUrl = normalizeUrl(
+    merged.GITHUB_API_URL || "https://api.github.com"
+  );
+  const synologyRunnerBaseDir =
+    merged.SYNOLOGY_RUNNER_BASE_DIR ||
+    "/volume1/docker/synology-github-runner";
+  const composeProjectName =
+    merged.COMPOSE_PROJECT_NAME || "synology-github-runner";
+  const runnerVersion = normalizeRunnerVersion(merged.RUNNER_VERSION || "2.333.0");
+
   return {
     githubPat,
-    githubApiUrl: normalizeUrl(
-      merged.GITHUB_API_URL || "https://api.github.com"
-    ),
-    synologyRunnerBaseDir:
-      merged.SYNOLOGY_RUNNER_BASE_DIR ||
-      "/volume1/docker/synology-github-runner",
-    composeProjectName:
-      merged.COMPOSE_PROJECT_NAME || "synology-github-runner",
-    runnerVersion: normalizeRunnerVersion(merged.RUNNER_VERSION || "2.333.0"),
-    raw: merged
+    githubApiUrl,
+    synologyRunnerBaseDir,
+    composeProjectName,
+    runnerVersion,
+    raw: {
+      ...merged,
+      GITHUB_API_URL: githubApiUrl,
+      SYNOLOGY_RUNNER_BASE_DIR: synologyRunnerBaseDir,
+      COMPOSE_PROJECT_NAME: composeProjectName,
+      RUNNER_VERSION: runnerVersion
+    }
   };
 }
 
