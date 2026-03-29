@@ -38,7 +38,14 @@ cleanup() {
   if [[ "${KEEP_ARTIFACTS}" == "1" ]]; then
     log "kept smoke artifacts at ${TEMP_DIR}"
   else
-    rm -rf "${TEMP_DIR}"
+    if ! rm -rf "${TEMP_DIR}" 2>/dev/null; then
+      docker_cmd run --rm \
+        -v "${TEMP_DIR}:/cleanup" \
+        alpine:3.22 \
+        sh -lc 'rm -rf /cleanup/* /cleanup/.[!.]* /cleanup/..?* 2>/dev/null || true' \
+        >/dev/null 2>&1 || true
+      rm -rf "${TEMP_DIR}" >/dev/null 2>&1 || true
+    fi
   fi
 
   exit "${exit_code}"
