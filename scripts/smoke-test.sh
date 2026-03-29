@@ -98,6 +98,30 @@ if [[ ! -f "${LOG_DIR}/mock-api.log" ]] || ! grep -q "listening 0.0.0.0:8080" "$
   exit 1
 fi
 
+verify_python_toolcache() {
+  log "verifying built-in Python tool cache"
+
+  docker_cmd run --rm \
+    --entrypoint /bin/bash \
+    "${IMAGE_REF}" \
+    -lc '
+      set -Eeuo pipefail
+      python_version="$(python3 -c "import platform; print(platform.python_version())")"
+      case "$(uname -m)" in
+        x86_64) python_arch="x64" ;;
+        aarch64|arm64) python_arch="arm64" ;;
+        *) echo "unsupported architecture: $(uname -m)" >&2; exit 1 ;;
+      esac
+      python_cache_root="${RUNNER_TOOL_CACHE:-/opt/hostedtoolcache}/Python/${python_version}"
+
+      test -L "${python_cache_root}/${python_arch}"
+      test -f "${python_cache_root}/${python_arch}.complete"
+      test "$(readlink -f "${python_cache_root}/${python_arch}")" = "/usr/local"
+      python3.12 --version
+      python --version
+    '
+}
+
 run_smoke_case() {
   local mode="$1"
   local state_dir="${TEMP_DIR}/state-${mode}"
@@ -158,6 +182,7 @@ run_smoke_case() {
 
 run_smoke_case runner
 run_smoke_case root
+verify_python_toolcache
 
 log "smoke test passed"
 log "image=${IMAGE_REF}"

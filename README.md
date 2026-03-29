@@ -17,7 +17,7 @@ Shell-only, ephemeral GitHub self-hosted runner pools for Synology NAS deploymen
   - `synology-private`
   - `synology-public`
 
-This v1 runner class supports shell jobs, JavaScript actions, composite actions, the bundled shell-safe Node setup action, built-in Python `3.12` workflows, and Terraform CLI workflows. It does not support Docker-based actions, `container:` jobs, or service containers.
+This v1 runner class supports shell jobs, JavaScript actions, composite actions, the bundled shell-safe Node setup action, built-in Python `3.12` workflows, local `actions/setup-python@v6` resolution for Python `3.12`, and Terraform CLI workflows. It does not support Docker-based actions, `container:` jobs, or service containers.
 
 ## Repo Layout
 
@@ -63,7 +63,7 @@ If you set `resources.cpus` or `resources.pidsLimit`, `validate-config` and `ren
 7. Build the runner image:
 
 ```bash
-./scripts/build-image.sh ghcr.io/your-org/synology-github-runner:0.1.6 --push
+./scripts/build-image.sh ghcr.io/your-org/synology-github-runner:0.1.7 --push
 ```
 
 When `--push` is used without an explicit `--platform`, the helper now defaults to `linux/amd64,linux/arm64` so the same tag works across Intel and ARM Synology models. A single-arch tag combined with the wrong `platform` or `architecture` setting will fail at startup with `Exec format error`.
@@ -134,10 +134,11 @@ The shell-only runner image directly supports these job profiles without Docker 
 - Node `18` plus `npm` with `actions/cache`
 - Node `24` when bootstrapped through `OMT-Global/synology-github-runner/actions/setup-shell-safe-node`
 - Python `3.12` plus `pip` with `actions/cache`
+- `actions/setup-python@v6` when `python-version: '3.12'`
 - Terraform `1.6.6` plus plugin-cache directories under `RUNNER_TEMP`
 - Bash/docs validation jobs that only need the standard CLI toolchain
 
-For Python projects, the runner image already carries Python `3.12`. Repos that only need `3.12` can run directly on the shell-only pool. Repos with Python version matrices should keep the non-`3.12` lanes on GitHub-hosted runners and only route the `3.12` lane to self-hosted runners.
+For Python projects, the runner image already carries Python `3.12` and exposes that exact interpreter through `RUNNER_TOOL_CACHE`, so `actions/setup-python@v6` with `python-version: '3.12'` resolves locally on these runners instead of attempting a distro-specific download. Repos that only need `3.12` can stay on the shell-only pool. Repos with Python version matrices should keep the non-`3.12` lanes on GitHub-hosted runners and only route the built-in `3.12` lane to self-hosted runners.
 
 For OpenClaw Ouro style workflows, the compatible jobs are the Node/npm validators, docs checks, Python `3.12` linting, Terraform validation, and smoke scripts that stay within bash plus the baked-in toolchain. Keep workflow-parser jobs that rely on extra distro packages, plus any `container:`, `services:`, browser, or Docker-daemon jobs, on GitHub-hosted runners.
 
@@ -174,6 +175,7 @@ pnpm smoke-test
 The smoke test:
 
 - builds the local runner image
+- verifies the built-in Python `3.12` tool-cache entry resolves to the baked-in interpreter
 - starts a mock GitHub token API on an isolated Docker network
 - mounts stubbed `config.sh` and `run.sh` files into `/actions-runner` as the read-only runner source
 - verifies registration token fetch, runner config flags, run invocation, remove token fetch, and cleanup for both the normal runner-user mode and the Synology-style root-fallback mode
@@ -195,6 +197,7 @@ SMOKE_KEEP_ARTIFACTS=1 pnpm smoke-test
 - Run a private-repo shell workflow with secrets
 - Run a public-repo shell workflow without secrets
 - Run a self-hosted workflow that uses `OMT-Global/synology-github-runner/actions/setup-shell-safe-node@<ref>`
+- Run a self-hosted workflow that uses `actions/setup-python@v6` with `python-version: '3.12'`
 - Verify `python3 --version` reports `3.12.x` and `terraform version` reports `1.6.6`
 - Confirm each job de-registers the runner and the service restarts cleanly
 - Confirm there is no Docker socket mount in the rendered compose file
