@@ -34,10 +34,17 @@ RUN useradd --create-home --home-dir /home/runner --shell /bin/bash runner \
     && chown -R runner:runner /home/runner "${RUNNER_TOOL_CACHE}" "${RUNNER_TEMP}" /opt/node18
 
 RUN case "${TARGETARCH}" in \
-      amd64) node_arch="x64"; terraform_arch="amd64" ;; \
-      arm64) node_arch="arm64"; terraform_arch="arm64" ;; \
+      amd64) node_arch="x64"; terraform_arch="amd64"; python_arch="x64" ;; \
+      arm64) node_arch="arm64"; terraform_arch="arm64"; python_arch="arm64" ;; \
       *) echo "unsupported TARGETARCH: ${TARGETARCH}" >&2; exit 1 ;; \
     esac \
+    && python_version="$(python3 -c 'import platform; print(platform.python_version())')" \
+    && python_cache_root="${RUNNER_TOOL_CACHE}/Python/${python_version}" \
+    && mkdir -p "${python_cache_root}" \
+    && ln -sfn /usr/local "${python_cache_root}/${python_arch}" \
+    && : > "${python_cache_root}/${python_arch}.complete" \
+    && chown runner:runner "${python_cache_root}" "${python_cache_root}/${python_arch}.complete" \
+    && chown -h runner:runner "${python_cache_root}/${python_arch}" \
     && node_archive="node-v${NODE_VERSION}-linux-${node_arch}.tar.xz" \
     && curl -fsSLO "https://nodejs.org/dist/v${NODE_VERSION}/${node_archive}" \
     && curl -fsSLO "https://nodejs.org/dist/v${NODE_VERSION}/SHASUMS256.txt" \

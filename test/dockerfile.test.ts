@@ -25,6 +25,9 @@ describe("Dockerfile packaging", () => {
     expect(dockerfile).toContain("RUNNER_TEMP=/tmp/github-runner-temp");
     expect(dockerfile).toContain("RUNNER_TOOL_CACHE=/opt/hostedtoolcache");
     expect(dockerfile).toContain("AGENT_TOOLSDIRECTORY=/opt/hostedtoolcache");
+    expect(dockerfile).toContain('python_cache_root="${RUNNER_TOOL_CACHE}/Python/${python_version}"');
+    expect(dockerfile).toContain('ln -sfn /usr/local "${python_cache_root}/${python_arch}"');
+    expect(dockerfile).toContain(': > "${python_cache_root}/${python_arch}.complete"');
     expect(dockerfile).toMatch(/\btar\b/);
     expect(dockerfile).toMatch(/\bzstd\b/);
     expect(dockerfile).toContain("node-v${NODE_VERSION}-linux-${node_arch}.tar.xz");
