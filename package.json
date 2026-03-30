@@ -1,6 +1,6 @@
 {
   "name": "synology-github-runner",
-  "version": "0.1.7",
+  "version": "0.1.9",
   "private": true,
   "license": "MIT",
   "description": "Shell-only GitHub self-hosted runner pools for Synology NAS deployments.",
@@ -12,12 +12,18 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "check-runner-version": "tsx src/cli.ts check-runner-version",
+    "install-synology-project": "tsx src/cli.ts install-synology-project",
     "lint": "tsc --noEmit -p tsconfig.json",
+    "render-lume-runner-manifest": "tsx src/cli.ts render-lume-runner-manifest",
     "render-compose": "tsx src/cli.ts render-compose",
+    "render-synology-project-manifest": "tsx src/cli.ts render-synology-project-manifest",
+    "teardown-synology-project": "tsx src/cli.ts teardown-synology-project",
     "runner-release-manifest": "tsx src/cli.ts runner-release-manifest",
     "smoke-test": "bash scripts/smoke-test.sh",
     "test": "vitest run",
     "validate-config": "tsx src/cli.ts validate-config",
+    "validate-lume-config": "tsx src/cli.ts validate-lume-config",
+    "validate-lume-github": "tsx src/cli.ts validate-lume-github",
     "validate-github": "tsx src/cli.ts validate-github",
     "validate-image": "tsx src/cli.ts validate-image"
   },

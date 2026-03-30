@@ -11,10 +11,23 @@ describe("runner entrypoint", () => {
 
     expect(script).toContain('ensure_root_runtime_dir "${RUNNER_WORK_DIR}"');
     expect(script).toContain('ensure_root_runtime_dir "${RUNNER_TEMP}"');
-    expect(script).toContain('ensure_root_runtime_dir "${RUNNER_TOOL_CACHE}"');
+    expect(script).toContain('ensure_root_tool_cache "${RUNNER_TOOL_CACHE}"');
     expect(script).toContain(
       'log "runtime directory permission update failed for ${dir}; recreating it for root runner execution"'
     );
     expect(script).toContain('rm -rf "${dir}"');
+  });
+
+  test("preserves the baked-in tool cache during root fallback", () => {
+    const script = fs.readFileSync(
+      path.resolve("docker/runner-entrypoint.sh"),
+      "utf8"
+    );
+
+    expect(script).toContain("ensure_root_tool_cache()");
+    expect(script).toContain(
+      'log "tool cache top-level permission update failed for ${dir}; preserving baked-in tool cache for root runner execution"'
+    );
+    expect(script).not.toContain('rm -rf "${RUNNER_TOOL_CACHE}"');
   });
 });

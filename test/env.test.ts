@@ -60,6 +60,19 @@ describe("loadDeploymentEnv", () => {
     expect(env.raw).toMatchObject({
       GITHUB_API_URL: "https://api.github.com",
       SYNOLOGY_RUNNER_BASE_DIR: "/volume1/docker/synology-github-runner",
+      SYNOLOGY_PORT: "5001",
+      SYNOLOGY_SECURE: "true",
+      SYNOLOGY_CERT_VERIFY: "false",
+      SYNOLOGY_DSM_VERSION: "7",
+      SYNOLOGY_API_REPO: `${os.homedir()}/src/synology-api`,
+      SYNOLOGY_PROJECT_DIR: "/volume1/docker/synology-github-runner",
+      SYNOLOGY_PROJECT_COMPOSE_FILE: "compose.yaml",
+      SYNOLOGY_PROJECT_ENV_FILE: ".env",
+      SYNOLOGY_INSTALL_PULL_IMAGES: "true",
+      SYNOLOGY_INSTALL_FORCE_RECREATE: "true",
+      SYNOLOGY_INSTALL_REMOVE_ORPHANS: "true",
+      LUME_RUNNER_BASE_DIR: `${os.homedir()}/Library/Application Support/synology-github-runner/lume`,
+      LUME_RUNNER_ENV_FILE: `${os.homedir()}/Library/Application Support/synology-github-runner/lume/runner.env`,
       COMPOSE_PROJECT_NAME: "synology-github-runner",
       RUNNER_VERSION: "2.333.0"
     });
@@ -120,5 +133,21 @@ describe("loadDeploymentEnv", () => {
     );
 
     expect(env.githubApiUrl).toBe("https://ghe.example.com/api/v3");
+  });
+
+  test("derives Synology HTTP defaults when secure is disabled", () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), "synology-env-"));
+    tempPaths.push(directory);
+    const envPath = path.join(directory, ".env");
+
+    fs.writeFileSync(envPath, "SYNOLOGY_SECURE=false\n", "utf8");
+
+    const env = loadDeploymentEnv({
+      envPath,
+      requirePat: false
+    });
+
+    expect(env.synologySecure).toBe(false);
+    expect(env.synologyPort).toBe("5000");
   });
 });

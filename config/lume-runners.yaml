@@ -1,0 +1,21 @@
+version: 1
+pool:
+  key: macos-private
+  organization: omt-global
+  runnerGroup: macos-private
+  labels:
+    - macos
+    - arm64
+    - private
+  size: 2
+  vmBaseName: macos-runner-base
+  vmSlotPrefix: macos-runner-slot
+  imageTag: sequoia-xcode-16
+  cpu: 6
+  memory: 14GB
+  diskSize: 80GB
+  network: nat
+  guestUser: lume
+  guestPassword: lume
+  guestRunnerRoot: /Users/lume/actions-runner
+  guestWorkRoot: /Users/lume/actions-runner/_work
