@@ -1,15 +1,14 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source /usr/local/lib/github-runner-common.sh
+
 RUNNER_SOURCE_HOME="${RUNNER_SOURCE_HOME:-${RUNNER_HOME:-/actions-runner}}"
 RUNNER_HOME="${RUNNER_HOME:-}"
 runner_configured="false"
 runner_exit_code=0
 runner_exec_mode="runner"
-
-log() {
-  printf '[%s] %s\n' "$(date -Iseconds)" "$*"
-}
 
 run_runner_bash() {
   local command="$1"
@@ -21,61 +20,6 @@ run_runner_bash() {
   fi
 
   env RUNNER_EXECUTION_MODE="${runner_exec_mode}" "$@" gosu runner bash -lc "${command}"
-}
-
-require_env() {
-  local name="$1"
-  if [[ -z "${!name:-}" ]]; then
-    log "missing required environment variable: ${name}"
-    exit 1
-  fi
-}
-
-github_api_post() {
-  local endpoint="$1"
-  local tmp status body
-
-  tmp="$(mktemp)"
-  status="$(
-    curl -sS \
-      -o "${tmp}" \
-      -w '%{http_code}' \
-      -X POST \
-      -H "Authorization: Bearer ${GITHUB_PAT}" \
-      -H "Accept: application/vnd.github+json" \
-      -H "User-Agent: synology-github-runner" \
-      -H "X-GitHub-Api-Version: 2022-11-28" \
-      "${GITHUB_API_URL%/}${endpoint}"
-  )"
-  body="$(cat "${tmp}")"
-  rm -f "${tmp}"
-
-  if [[ "${status}" -lt 200 || "${status}" -ge 300 ]]; then
-    log "GitHub API POST ${endpoint} failed with ${status}: ${body}"
-    return 1
-  fi
-
-  printf '%s' "${body}"
-}
-
-request_runner_token() {
-  local kind="$1"
-  local endpoint
-
-  case "${kind}" in
-    registration)
-      endpoint="/orgs/${GITHUB_ORG}/actions/runners/registration-token"
-      ;;
-    remove)
-      endpoint="/orgs/${GITHUB_ORG}/actions/runners/remove-token"
-      ;;
-    *)
-      log "unsupported token kind: ${kind}"
-      return 1
-      ;;
-  esac
-
-  github_api_post "${endpoint}" | jq -r '.token // empty'
 }
 
 cleanup_local_state() {
@@ -111,31 +55,7 @@ prepare_runner_home() {
 }
 
 cleanup_runner() {
-  if [[ "${runner_configured}" != "true" ]]; then
-    return 0
-  fi
-
-  log "requesting remove token for ${RUNNER_NAME}"
-  local remove_token
-  if ! remove_token="$(request_runner_token remove)"; then
-    log "remove token request failed; leaving GitHub runner registration in place for manual cleanup"
-    return 0
-  fi
-
-  if [[ -z "${remove_token}" ]]; then
-    log "remove token response was empty; leaving GitHub runner registration in place for manual cleanup"
-    return 0
-  fi
-
-  if ! run_runner_bash \
-    "cd '${RUNNER_HOME}' && ./config.sh remove --token \"\${RUNNER_TOKEN}\"" \
-    "RUNNER_TOKEN=${remove_token}"; then
-    log "runner removal command failed; check GitHub runner inventory for stale registrations"
-    return 0
-  fi
-
-  cleanup_local_state
-  log "runner registration removed cleanly"
+  cleanup_runner_registration "run_runner_bash \"cd '${RUNNER_HOME}' && ./config.sh remove --token \\\"\\\${RUNNER_REMOVE_TOKEN}\\\"\""
 }
 
 prepare_runtime_dirs() {
@@ -144,7 +64,7 @@ prepare_runtime_dirs() {
   if [[ "${runner_exec_mode}" == "root" ]]; then
     ensure_root_runtime_dir "${RUNNER_WORK_DIR}"
     ensure_root_runtime_dir "${RUNNER_TEMP}"
-    ensure_root_runtime_dir "${RUNNER_TOOL_CACHE}"
+    ensure_root_tool_cache "${RUNNER_TOOL_CACHE}"
     return
   fi
 
@@ -162,6 +82,18 @@ ensure_root_runtime_dir() {
   rm -rf "${dir}"
   mkdir -p "${dir}"
   chmod -R u+rwX "${dir}"
+}
+
+ensure_root_tool_cache() {
+  local dir="$1"
+
+  mkdir -p "${dir}"
+
+  if chmod u+rwx "${dir}" 2>/dev/null; then
+    return
+  fi
+
+  log "tool cache top-level permission update failed for ${dir}; preserving baked-in tool cache for root runner execution"
 }
 
 on_exit() {

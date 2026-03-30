@@ -77,9 +77,10 @@ RUN case "${TARGETARCH}" in \
     && ./bin/installdependencies.sh \
     && chown -R runner:runner ${RUNNER_SOURCE_HOME} /home/runner
 
+COPY scripts/lib/github-runner-common.sh /usr/local/lib/github-runner-common.sh
 COPY docker/runner-entrypoint.sh /usr/local/bin/runner-entrypoint.sh
 
-RUN chmod 0755 /usr/local/bin/runner-entrypoint.sh
+RUN chmod 0755 /usr/local/lib/github-runner-common.sh /usr/local/bin/runner-entrypoint.sh
 
 HEALTHCHECK --interval=60s --timeout=10s --start-period=30s --retries=3 \
   CMD pgrep -f "Runner.Listener" > /dev/null || exit 1

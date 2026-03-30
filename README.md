@@ -16,6 +16,7 @@ Shell-only, ephemeral GitHub self-hosted runner pools for Synology NAS deploymen
 - Two organization runner pools by default:
   - `synology-private`
   - `synology-public`
+- The sample config starts with four private runner slots and two public runner slots.
 
 This v1 runner class supports shell jobs, JavaScript actions, composite actions, the bundled shell-safe Node setup action, built-in Python `3.12` workflows, local `actions/setup-python@v6` resolution for Python `3.12`, and Terraform CLI workflows. It does not support Docker-based actions, `container:` jobs, or service containers.
 
@@ -63,7 +64,7 @@ If you set `resources.cpus` or `resources.pidsLimit`, `validate-config` and `ren
 7. Build the runner image:
 
 ```bash
-./scripts/build-image.sh ghcr.io/your-org/synology-github-runner:0.1.7 --push
+./scripts/build-image.sh ghcr.io/your-org/synology-github-runner:0.1.9 --push
 ```
 
 When `--push` is used without an explicit `--platform`, the helper now defaults to `linux/amd64,linux/arm64` so the same tag works across Intel and ARM Synology models. A single-arch tag combined with the wrong `platform` or `architecture` setting will fail at startup with `Exec format error`.
@@ -76,11 +77,30 @@ pnpm validate-image -- --config config/pools.yaml --env .env
 
 8. Deploy the generated compose file to Synology Container Manager and start the stack.
 
+For a fully programmatic install from your workstation, this repo can also reuse your local [synology-api](https://github.com/N4S4/synology-api) checkout to stage the compose project and trigger `docker compose up -d` on the NAS through DSM Task Scheduler:
+
+```bash
+pnpm render-synology-project-manifest -- --config config/pools.yaml --env .env
+pnpm install-synology-project -- --config config/pools.yaml --env .env
+pnpm teardown-synology-project -- --config config/pools.yaml --env .env
+```
+
+That installer path:
+
+- uploads `compose.yaml` plus a project-local `.env` into `SYNOLOGY_PROJECT_DIR`
+- creates a one-shot root Task Scheduler task through `synology-api`
+- runs `docker compose -p $COMPOSE_PROJECT_NAME up -d --force-recreate --remove-orphans`
+- deletes the temporary scheduled task after completion
+
+`install-synology-project` is the recreate/resize path. If you change [config/pools.yaml](/Users/johnteneyckjr./src/synology-github-runner/config/pools.yaml) from four private runners to two, or from two public runners to six, rerun `pnpm install-synology-project ...` and the generated compose project will reconcile to the new slot counts. `--force-recreate` refreshes existing services, and `--remove-orphans` removes slots that no longer exist in the rendered compose file.
+
+Use `pnpm teardown-synology-project ...` when you want an explicit `docker compose down` on the NAS before reinstalling or when you want the runner project fully stopped.
+
+It intentionally avoids undocumented `SYNO.Docker.Project create/import` calls. If the Synology Docker daemon can see the compose project normally, Container Manager should still surface it as a compose project after the install task runs.
+
 ## Publishing A Release Image
 
 Use [release-image.yml](/Users/johnteneyckjr./src/synology-github-runner/.github/workflows/release-image.yml) for published tags instead of relying on an ad hoc local push. The workflow runs on GitHub-hosted runners, not the Synology shell-only pool, because it needs multi-arch Buildx, QEMU, and registry publish support.
-
-If your org GHCR policy rejects workflow `GITHUB_TOKEN` package pushes, set a repo or org secret named `GHCR_PAT` with a classic PAT that has `repo`, `read:org`, `workflow`, `write:packages`, and `delete:packages`, and authorize it for SSO against `OMT-Global`. The workflow prefers `GHCR_PAT`, then `UPSTREAM_PAT`, and only falls back to `GITHUB_TOKEN` when neither PAT secret is available.
 
 The release workflow:
 
@@ -144,6 +164,29 @@ For Python projects, the runner image already carries Python `3.12` and exposes 
 
 For OpenClaw Ouro style workflows, the compatible jobs are the Node/npm validators, docs checks, Python `3.12` linting, Terraform validation, and smoke scripts that stay within bash plus the baked-in toolchain. Keep workflow-parser jobs that rely on extra distro packages, plus any `container:`, `services:`, browser, or Docker-daemon jobs, on GitHub-hosted runners.
 
+## Lume macOS Pool
+
+This repo now also carries a separate host-side control plane for pooled macOS runner VMs under [config/lume-runners.yaml](/Users/johnteneyckjr./src/synology-github-runner/config/lume-runners.yaml). This is not a macOS container path. `lume` runs full macOS VMs, and the host scripts recycle per-slot VM clones from a sealed base VM so the job host itself is ephemeral.
+
+The Lume flow is:
+
+- create and seal a base VM such as `macos-runner-base`
+- run [scripts/lume/reconcile-pool.sh](/Users/johnteneyckjr./src/synology-github-runner/scripts/lume/reconcile-pool.sh) on the host MacBook
+- let each slot clone boot, receive bootstrap assets over `lume ssh`, register one ephemeral runner in `macos-private`, run one job, and get destroyed
+
+Useful Lume commands:
+
+```bash
+pnpm validate-lume-config -- --config config/lume-runners.yaml --env .env
+pnpm validate-lume-github -- --config config/lume-runners.yaml --env .env
+pnpm render-lume-runner-manifest -- --config config/lume-runners.yaml --env .env --slot 1
+bash scripts/lume/create-base-vm.sh --config config/lume-runners.yaml --env .env
+bash scripts/lume/reconcile-pool.sh --config config/lume-runners.yaml --env .env
+bash scripts/lume/status.sh --config config/lume-runners.yaml --env .env
+```
+
+Keep the Lume runner env file outside git and locked down with `chmod 600`. The host controller reads that file and copies it into each guest VM just before starting the guest bootstrap. Do not bake GitHub credentials into the base VM image.
+
 ## Security Notes
 
 - No extra NAS shares should be mounted into the runner services.
@@ -161,6 +204,9 @@ pnpm validate-config -- --config config/pools.yaml --env .env
 pnpm validate-github -- --config config/pools.yaml --env .env
 pnpm validate-image -- --config config/pools.yaml --env .env
 pnpm render-compose -- --config config/pools.yaml --env .env --output docker-compose.generated.yml
+pnpm render-synology-project-manifest -- --config config/pools.yaml --env .env
+pnpm install-synology-project -- --config config/pools.yaml --env .env
+pnpm teardown-synology-project -- --config config/pools.yaml --env .env
 pnpm check-runner-version -- --env .env
 pnpm runner-release-manifest -- --env .env
 pnpm smoke-test

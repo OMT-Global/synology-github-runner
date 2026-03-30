@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import dotenv from "dotenv";
 import { normalizeRunnerVersion } from "./runner-version.js";
@@ -7,6 +8,22 @@ export interface DeploymentEnv {
   githubPat?: string;
   githubApiUrl: string;
   synologyRunnerBaseDir: string;
+  synologyHost?: string;
+  synologyPort: string;
+  synologyUsername?: string;
+  synologyPassword?: string;
+  synologySecure: boolean;
+  synologyCertVerify: boolean;
+  synologyDsmVersion: number;
+  synologyApiRepo: string;
+  synologyProjectDir: string;
+  synologyProjectComposeFile: string;
+  synologyProjectEnvFile: string;
+  synologyInstallPullImages: boolean;
+  synologyInstallForceRecreate: boolean;
+  synologyInstallRemoveOrphans: boolean;
+  lumeRunnerBaseDir: string;
+  lumeRunnerEnvFile: string;
   composeProjectName: string;
   runnerVersion: string;
   raw: Record<string, string>;
@@ -49,6 +66,43 @@ export function loadDeploymentEnv(
   const synologyRunnerBaseDir =
     merged.SYNOLOGY_RUNNER_BASE_DIR ||
     "/volume1/docker/synology-github-runner";
+  const synologySecure = parseBoolean(merged.SYNOLOGY_SECURE, true);
+  const synologyPort =
+    merged.SYNOLOGY_PORT || (synologySecure ? "5001" : "5000");
+  const synologyCertVerify = parseBoolean(
+    merged.SYNOLOGY_CERT_VERIFY,
+    false
+  );
+  const synologyDsmVersion = parseInteger(merged.SYNOLOGY_DSM_VERSION, 7);
+  const synologyApiRepo = expandHome(
+    merged.SYNOLOGY_API_REPO || "~/src/synology-api"
+  );
+  const synologyProjectDir =
+    merged.SYNOLOGY_PROJECT_DIR || synologyRunnerBaseDir;
+  const synologyProjectComposeFile =
+    merged.SYNOLOGY_PROJECT_COMPOSE_FILE || "compose.yaml";
+  const synologyProjectEnvFile =
+    merged.SYNOLOGY_PROJECT_ENV_FILE || ".env";
+  const synologyInstallPullImages = parseBoolean(
+    merged.SYNOLOGY_INSTALL_PULL_IMAGES,
+    true
+  );
+  const synologyInstallForceRecreate = parseBoolean(
+    merged.SYNOLOGY_INSTALL_FORCE_RECREATE,
+    true
+  );
+  const synologyInstallRemoveOrphans = parseBoolean(
+    merged.SYNOLOGY_INSTALL_REMOVE_ORPHANS,
+    true
+  );
+  const lumeRunnerBaseDir = expandHome(
+    merged.LUME_RUNNER_BASE_DIR ||
+      "~/Library/Application Support/synology-github-runner/lume"
+  );
+  const lumeRunnerEnvFile = expandHome(
+    merged.LUME_RUNNER_ENV_FILE ||
+      path.join(lumeRunnerBaseDir, "runner.env")
+  );
   const composeProjectName =
     merged.COMPOSE_PROJECT_NAME || "synology-github-runner";
   const runnerVersion = normalizeRunnerVersion(merged.RUNNER_VERSION || "2.333.0");
@@ -57,12 +111,41 @@ export function loadDeploymentEnv(
     githubPat,
     githubApiUrl,
     synologyRunnerBaseDir,
+    synologyHost: merged.SYNOLOGY_HOST?.trim() || undefined,
+    synologyPort,
+    synologyUsername: merged.SYNOLOGY_USERNAME?.trim() || undefined,
+    synologyPassword: merged.SYNOLOGY_PASSWORD?.trim() || undefined,
+    synologySecure,
+    synologyCertVerify,
+    synologyDsmVersion,
+    synologyApiRepo,
+    synologyProjectDir,
+    synologyProjectComposeFile,
+    synologyProjectEnvFile,
+    synologyInstallPullImages,
+    synologyInstallForceRecreate,
+    synologyInstallRemoveOrphans,
+    lumeRunnerBaseDir,
+    lumeRunnerEnvFile,
     composeProjectName,
     runnerVersion,
     raw: {
       ...merged,
       GITHUB_API_URL: githubApiUrl,
       SYNOLOGY_RUNNER_BASE_DIR: synologyRunnerBaseDir,
+      SYNOLOGY_PORT: synologyPort,
+      SYNOLOGY_SECURE: String(synologySecure),
+      SYNOLOGY_CERT_VERIFY: String(synologyCertVerify),
+      SYNOLOGY_DSM_VERSION: String(synologyDsmVersion),
+      SYNOLOGY_API_REPO: synologyApiRepo,
+      SYNOLOGY_PROJECT_DIR: synologyProjectDir,
+      SYNOLOGY_PROJECT_COMPOSE_FILE: synologyProjectComposeFile,
+      SYNOLOGY_PROJECT_ENV_FILE: synologyProjectEnvFile,
+      SYNOLOGY_INSTALL_PULL_IMAGES: String(synologyInstallPullImages),
+      SYNOLOGY_INSTALL_FORCE_RECREATE: String(synologyInstallForceRecreate),
+      SYNOLOGY_INSTALL_REMOVE_ORPHANS: String(synologyInstallRemoveOrphans),
+      LUME_RUNNER_BASE_DIR: lumeRunnerBaseDir,
+      LUME_RUNNER_ENV_FILE: lumeRunnerEnvFile,
       COMPOSE_PROJECT_NAME: composeProjectName,
       RUNNER_VERSION: runnerVersion
     }
@@ -71,4 +154,51 @@ export function loadDeploymentEnv(
 
 function normalizeUrl(value: string): string {
   return value.replace(/\/+$/, "");
+}
+
+function expandHome(value: string): string {
+  if (value === "~") {
+    return os.homedir();
+  }
+
+  if (value.startsWith("~/")) {
+    return path.join(os.homedir(), value.slice(2));
+  }
+
+  return value;
+}
+
+function parseBoolean(
+  value: string | undefined,
+  defaultValue: boolean
+): boolean {
+  if (value === undefined) {
+    return defaultValue;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  if (["1", "true", "yes", "on"].includes(normalized)) {
+    return true;
+  }
+  if (["0", "false", "no", "off"].includes(normalized)) {
+    return false;
+  }
+
+  throw new Error(`invalid boolean value "${value}"`);
+}
+
+function parseInteger(
+  value: string | undefined,
+  defaultValue: number
+): number {
+  if (value === undefined) {
+    return defaultValue;
+  }
+
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed)) {
+    throw new Error(`invalid integer value "${value}"`);
+  }
+
+  return parsed;
 }

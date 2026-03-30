@@ -22,8 +22,7 @@ jobs:
     name: publish-and-verify
     runs-on: ubuntu-latest
     env:
-      GHCR_TOKEN: ${{ secrets.GHCR_PAT || secrets.UPSTREAM_PAT || secrets.GITHUB_TOKEN }}
-      GITHUB_PAT: ${{ secrets.GHCR_PAT || secrets.UPSTREAM_PAT || secrets.GITHUB_TOKEN }}
+      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
       SYNOLOGY_RUNNER_BASE_DIR: /volume1/docker/synology-github-runner
       COMPOSE_PROJECT_NAME: synology-github-runner
     timeout-minutes: 45
@@ -53,7 +52,7 @@ jobs:
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ env.GHCR_TOKEN }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - id: release_meta
         run: |

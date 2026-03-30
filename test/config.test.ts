@@ -294,6 +294,24 @@ function deploymentEnv(): DeploymentEnv {
   return {
     githubApiUrl: "https://api.github.com",
     synologyRunnerBaseDir: "/volume1/docker/synology-github-runner",
+    synologyHost: "nas.example.com",
+    synologyPort: "5001",
+    synologyUsername: "admin",
+    synologyPassword: "secret",
+    synologySecure: true,
+    synologyCertVerify: false,
+    synologyDsmVersion: 7,
+    synologyApiRepo: "/Users/tester/src/synology-api",
+    synologyProjectDir: "/volume1/docker/synology-github-runner",
+    synologyProjectComposeFile: "compose.yaml",
+    synologyProjectEnvFile: ".env",
+    synologyInstallPullImages: true,
+    synologyInstallForceRecreate: true,
+    synologyInstallRemoveOrphans: true,
+    lumeRunnerBaseDir:
+      "/Users/tester/Library/Application Support/synology-github-runner/lume",
+    lumeRunnerEnvFile:
+      "/Users/tester/Library/Application Support/synology-github-runner/lume/runner.env",
     composeProjectName: "synology-github-runner",
     runnerVersion: "2.327.1",
     raw: {

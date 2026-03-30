@@ -104,34 +104,26 @@ describe("CI workflow", () => {
     expect(workflow.jobs.test_public_fork_pr["runs-on"]).toBe("ubuntu-latest");
   });
 
-  test("emits a CI Gate status that accepts success or skipped upstream jobs", () => {
+  test("keeps the Lume macOS pool contract on hosted macOS runners", () => {
     const workflow = YAML.parse(
       fs.readFileSync(path.resolve(".github/workflows/ci.yml"), "utf8")
     ) as {
       jobs: Record<string, Record<string, unknown>>;
     };
 
-    const gateJob = workflow.jobs.ci_gate;
-    const steps = gateJob.steps as Array<Record<string, unknown>>;
-    const checkStep = steps.find((step) => step.name === "Check required CI jobs");
+    const lumeJob = workflow.jobs.lume_macos_contract_trusted;
+    const steps = lumeJob.steps as Array<Record<string, unknown>>;
+    const renderStep = steps.find(
+      (step) => step.name === "Render Lume runner manifest"
+    );
+    const syntaxStep = steps.find(
+      (step) => step.name === "Validate Lume shell scripts"
+    );
 
-    expect(gateJob.name).toBe("CI Gate");
-    expect(gateJob.if).toBe("always()");
-    expect(gateJob.needs).toEqual([
-      "test_self_hosted_trusted",
-      "shell_safe_contract_trusted",
-      "test_public_fork_pr"
-    ]);
-    expect(gateJob["runs-on"]).toBe("ubuntu-latest");
-    expect(String(checkStep?.env?.RESULTS)).toContain(
-      "test_self_hosted_trusted=${{ needs.test_self_hosted_trusted.result }}"
-    );
-    expect(String(checkStep?.env?.RESULTS)).toContain(
-      "shell_safe_contract_trusted=${{ needs.shell_safe_contract_trusted.result }}"
-    );
-    expect(String(checkStep?.env?.RESULTS)).toContain(
-      "test_public_fork_pr=${{ needs.test_public_fork_pr.result }}"
-    );
-    expect(String(checkStep?.run)).toContain('$status" == "success" || "$status" == "skipped"');
+    expect(lumeJob["runs-on"]).toBe("macos-latest");
+    expect(String(renderStep?.run)).toContain("pnpm validate-lume-config");
+    expect(String(renderStep?.run)).toContain("pnpm render-lume-runner-manifest");
+    expect(String(syntaxStep?.run)).toContain("bash -n scripts/guest/macos-runner-bootstrap.sh");
+    expect(String(syntaxStep?.run)).toContain("bash -n scripts/lume/reconcile-pool.sh");
   });
 });

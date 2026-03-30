@@ -104,6 +104,41 @@ jobs:
           EOF
           terraform -chdir=.tmp/ci-shell-safe/terraform init -backend=false
 
+  lume_macos_contract_trusted:
+    name: lume macos contract
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: macos-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v5
+        with:
+          version: 10.32.1
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm test
+      - run: pnpm build
+      - name: Render Lume runner manifest
+        run: |
+          cp .env.example /tmp/lume.env
+          pnpm validate-lume-config -- --config config/lume-runners.yaml --env /tmp/lume.env
+          pnpm render-lume-runner-manifest -- --config config/lume-runners.yaml --env /tmp/lume.env --slot 1
+      - name: Validate Lume shell scripts
+        run: |
+          bash -n scripts/lib/github-runner-common.sh
+          bash -n scripts/guest/macos-runner-bootstrap.sh
+          bash -n scripts/lume/lib.sh
+          bash -n scripts/lume/create-base-vm.sh
+          bash -n scripts/lume/create-slot.sh
+          bash -n scripts/lume/destroy-slot.sh
+          bash -n scripts/lume/run-slot.sh
+          bash -n scripts/lume/reconcile-pool.sh
+          bash -n scripts/lume/status.sh
+
   test_public_fork_pr:
     name: test
     if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository
@@ -122,32 +157,3 @@ jobs:
       - run: pnpm lint
       - run: pnpm test
       - run: pnpm build
-
-  ci_gate:
-    name: CI Gate
-    if: always()
-    needs:
-      - test_self_hosted_trusted
-      - shell_safe_contract_trusted
-      - test_public_fork_pr
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check required CI jobs
-        env:
-          RESULTS: >-
-            test_self_hosted_trusted=${{ needs.test_self_hosted_trusted.result }}
-            shell_safe_contract_trusted=${{ needs.shell_safe_contract_trusted.result }}
-            test_public_fork_pr=${{ needs.test_public_fork_pr.result }}
-        run: |
-          failed=0
-          for entry in $RESULTS; do
-            job="${entry%%=*}"
-            status="${entry##*=}"
-            if [[ "$status" == "success" || "$status" == "skipped" ]]; then
-              echo "OK   $job => $status"
-            else
-              echo "FAIL $job => $status"
-              failed=1
-            fi
-          done
-          exit "$failed"
